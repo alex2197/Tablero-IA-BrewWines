@@ -10,11 +10,11 @@ interface Mensaje {
 
 const SUGERENCIAS = [
   '¿Cómo van las ventas?',
+  '¿Cuál es mi retención real?',
+  '¿Cuánto voy a vender en 3 meses?',
   '¿Quién me debe más?',
+  'Llévame a Canales',
   '¿Qué debo revisar?',
-  '¿Qué inventario está parado?',
-  'Muéstrame solo Cancún',
-  'Ranking de vendedores',
 ];
 
 /** Convierte **negritas** en <strong>, escapando el resto. */

@@ -97,6 +97,46 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'consultar_retencion',
+    description:
+      'Retención real mes a mes: de los clientes que compraron el mes anterior, cuántos ' +
+      'volvieron a comprar. Devuelve también clientes nuevos, recurrentes y churn. ' +
+      'Úsala para: retención, churn, recompra, fidelidad, "cuántos clientes se me van". ' +
+      'IMPORTANTE: el Power BI original calculaba retención como activos/totales, que es ' +
+      'penetración de catálogo. Si el usuario compara con su reporte anterior, explícale la diferencia.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'consultar_forecast',
+    description:
+      'Proyección de ingresos por regresión lineal sobre la tendencia mensual, con banda de ' +
+      'confianza y R². Úsala para: pronóstico, proyección, "cuánto voy a vender", tendencia futura. ' +
+      'El Power BI original multiplicaba los ingresos por 0.85 y 1.20, lo cual no proyecta nada.',
+    input_schema: {
+      type: 'object',
+      properties: { meses_adelante: { type: 'integer', description: 'Default 3, máximo 6' } },
+    },
+  },
+  {
+    name: 'consultar_cxc',
+    description:
+      'Métricas agregadas de cuentas por cobrar: DSO (días de cobro), saldo pendiente, ' +
+      'total facturado, total cobrado y % cobrado. Úsala para preguntas sobre salud de cobranza ' +
+      'en general, no sobre deudores específicos.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        desde: { type: 'string', description: 'YYYY-MM-DD' },
+        hasta: { type: 'string', description: 'YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'consultar_inventario_bodegas',
+    description: 'Unidades disponibles y valor de inventario agrupado por bodega o almacén.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'actualizar_tablero',
     description:
       'Cambia lo que el usuario ve en pantalla. Llámala SIEMPRE que pida ver, mostrar, ' +
@@ -107,15 +147,19 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
       properties: {
         vista: {
           type: 'string',
-          enum: ['ventas', 'cobranza', 'inventario', 'alertas'],
-          description: 'Pestaña a mostrar',
+          enum: ['ventas', 'canales', 'productos', 'productividad',
+                 'retencion', 'operativos', 'forecast', 'alertas'],
+          description: 'Pestaña a mostrar. ventas=resumen general, canales=CDMX/Cancún/etc, ' +
+            'productos=SKUs y categorías, productividad=clientes y vendedores, ' +
+            'retencion=recompra y churn, operativos=cobranza e inventario, forecast=proyección',
         },
-        canal: { type: 'string', description: 'Filtro de canal a aplicar' },
-        desde: { type: 'string', description: 'YYYY-MM-DD' },
-        hasta: { type: 'string', description: 'YYYY-MM-DD' },
-        etiqueta_periodo: {
-          type: 'string',
-          description: 'Nombre legible del periodo para el chip, ej. "Junio 2026"',
+        canal: { type: 'string', description: 'Filtro de canal' },
+        categoria: { type: 'string', description: 'Filtro de categoría de producto' },
+        vendedor: { type: 'string', description: 'Filtro de vendedor (nombre parcial)' },
+        cliente: { type: 'string', description: 'Filtro de cliente (nombre parcial)' },
+        meses: {
+          type: 'array', items: { type: 'string' },
+          description: 'Meses a mostrar en formato YYYY-MM, ej. ["2026-06"]',
         },
         limpiar: { type: 'boolean', description: 'true para quitar todos los filtros' },
       },

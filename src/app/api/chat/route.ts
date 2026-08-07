@@ -2,7 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS } from '@/lib/herramientas';
 import {
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
-  clientesDormidos, alertas, contexto,
+  inventarioPorBodega, clientesDormidos, retencionMensual, resumenClientes,
+  metricasCxC, forecast, alertas, contexto,
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
@@ -23,6 +24,16 @@ DATOS DISPONIBLES
   no contra la fecha real, y acláralo en una frase corta.
 - El último mes cargado puede estar incompleto. Si lo usas para comparar, adviértelo.
 - Canales: ${ctx.canales.join(', ')}.
+- Categorías: ${ctx.categorias.slice(0, 12).join(', ')}.
+- Pestañas del tablero: Ventas General, Canales, Productos, Productividad,
+  Retención, Operativos, Forecast y Alertas.
+
+DIFERENCIAS CON EL POWER BI ANTERIOR (menciónalas si el usuario compara cifras)
+- Retención: antes era activos/catálogo (penetración). Ahora es recompra real mes a mes.
+- Forecast: antes era ingresos x 0.85 y x 1.20 sobre la misma curva. Ahora es regresión lineal
+  proyectada a meses futuros.
+- Cuentas por cobrar: antes no estaba relacionada al modelo, así que DSO y saldo ignoraban
+  los filtros de categoría y vendedor. Ahora sí responden.
 
 REGLAS DE EXACTITUD
 - NUNCA inventes, estimes ni redondees a ojo una cifra. Todo número sale de una herramienta.
@@ -68,6 +79,21 @@ async function ejecutar(nombre: string, args: Record<string, unknown>) {
       return { clientes: await clientesDormidos(args.limite as number) };
     case 'consultar_alertas':
       return { alertas: await alertas() };
+    case 'consultar_retencion': {
+      const [serie, res] = await Promise.all([retencionMensual(), resumenClientes()]);
+      return {
+        retencion_mensual: serie,
+        resumen: res,
+        nota: 'retencion_pct = clientes del mes previo que recompraron / clientes del mes previo. ' +
+              'penetracion_pct es la definicion que usaba el Power BI (activos/catalogo).',
+      };
+    }
+    case 'consultar_forecast':
+      return await forecast(Math.min((args.meses_adelante as number) ?? 3, 6));
+    case 'consultar_cxc':
+      return await metricasCxC({ desde: args.desde as string, hasta: args.hasta as string });
+    case 'consultar_inventario_bodegas':
+      return { bodegas: await inventarioPorBodega() };
     case 'actualizar_tablero':
       return { ok: true, estado_aplicado: args };
     default:

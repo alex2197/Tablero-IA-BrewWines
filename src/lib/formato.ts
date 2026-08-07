@@ -1,7 +1,6 @@
 import type { Formato } from './metricas';
 
-export const mxn = (n: number) =>
-  '$' + Math.round(n).toLocaleString('es-MX');
+export const mxn = (n: number) => '$' + Math.round(n).toLocaleString('es-MX');
 
 export const compacto = (n: number) =>
   Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M'
@@ -10,21 +9,26 @@ export const compacto = (n: number) =>
 
 export const entero = (n: number) => Math.round(n).toLocaleString('es-MX');
 
+export const pct = (n: number, dec = 1) => n.toFixed(dec) + '%';
+
 export function fmt(valor: number, formato: Formato): string {
   if (!Number.isFinite(valor)) return '—';
   switch (formato) {
     case 'moneda': return mxn(valor);
-    case 'porcentaje': return valor.toFixed(1) + '%';
+    case 'porcentaje': return pct(valor);
     case 'entero': return entero(valor);
+    case 'dias': return Math.round(valor) + ' días';
+    default: return String(valor);
   }
 }
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-/** '2026-03' -> 'Mar 2026' ; '2026-03-15' -> '15 Mar' */
+/** '2026-03' -> 'Mar' ; '2026-03-15' -> '15 Mar' ; '2026-Q1' -> 'Q1' */
 export function fechaCorta(s: string): string {
+  if (/^\d{4}-Q\d$/.test(s)) return s.slice(5);
   const p = s.split('-');
-  if (p.length === 2) return `${MESES[+p[1] - 1]} ${p[0]}`;
+  if (p.length === 2) return MESES[+p[1] - 1] ?? s;
   if (p.length === 3) return `${+p[2]} ${MESES[+p[1] - 1]}`;
   return s;
 }
