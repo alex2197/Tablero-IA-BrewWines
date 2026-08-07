@@ -333,32 +333,43 @@ export function VistaOperativos({ d }: { d: D }) {
 
 /* ================= 7. FORECAST ================= */
 export function VistaForecast({ d }: { d: D }) {
-  const fc = d.fc ?? { puntos: [], r2: 0, metodo: '' };
+  const fc = d.fc ?? { puntos: [], r2: 0, pendiente: 0, metodo: '' };
   const puntos: D[] = fc.puntos ?? [];
   const proy = puntos.filter(p => p.proyectado);
-  const gasto = num(d.mkt?.gasto);
-  const ingresos = num(d.kpis?.venta_neta);
+  const recla = d.recla ?? { filas: [], monto: 0, concepto: '' };
   const margenBruto = num(d.kpis?.margen_bruto);
+  const pend = num(fc.pendiente);
 
   return (
     <>
       <Kpis cols={4} items={[
-        { etiqueta: 'Ingresos reales', valor: mxn(ingresos), nota: 'periodo cargado' },
+        { etiqueta: 'Ingresos reales', valor: mxn(num(d.kpis?.venta_neta)), nota: 'periodo cargado' },
         { etiqueta: 'Proyección 3 meses', valor: mxn(proy.reduce((a, p) => a + num(p.tendencia), 0)),
-          nota: `R² = ${fc.r2.toFixed(2)}`, tono: fc.r2 >= 0.5 ? 'bueno' : 'malo' },
-        { etiqueta: 'Margen neto', valor: mxn(margenBruto - gasto),
-          nota: `bruto ${mxn(margenBruto)} − marketing ${mxn(gasto)}` },
-        { etiqueta: 'ROI marketing', valor: gasto ? (ingresos / gasto).toFixed(1) + 'x' : '—',
-          nota: `gasto ${mxn(gasto)}` },
+          nota: `confianza R² = ${fc.r2.toFixed(2)}`, tono: fc.r2 >= 0.5 ? 'bueno' : 'malo' },
+        { etiqueta: 'Tendencia mensual', valor: (pend >= 0 ? '+' : '') + mxn(pend),
+          nota: pend >= 0 ? 'de crecimiento por mes' : 'de caída por mes',
+          tono: pend >= 0 ? 'bueno' : 'malo' },
+        { etiqueta: 'Margen bruto', valor: mxn(margenBruto),
+          nota: `${pct(num(d.kpis?.margen_pct))} sobre ingresos` },
       ]} />
 
       <div className="bg-white border px-5 py-3 mb-4 text-[12.5px]"
         style={{ borderColor: T.linea, borderLeft: `3px solid ${T.ambar}` }}>
-        <strong>Cambio respecto al Power BI.</strong> El original calculaba
-        <code className="font-mono mx-1">Proy Conservadora = Ingresos × 0.85</code> y
-        <code className="font-mono mx-1">Proy Optimista = Ingresos × 1.20</code>, que es la misma
-        curva histórica escalada y no proyecta ningún mes futuro. Aquí se usa {fc.metodo.toLowerCase()},
-        con banda de confianza sobre el error histórico y proyección a 3 meses reales.
+        <strong>Cambios respecto al Power BI.</strong>
+        <ul className="mt-1.5 space-y-1">
+          <li>
+            · <strong>Proyección.</strong> El original usaba
+            <code className="font-mono mx-1">Ingresos × 0.85</code> y
+            <code className="font-mono mx-1">Ingresos × 1.20</code>, que es la misma curva
+            histórica escalada y no proyecta ningún mes futuro. Aquí se usa {fc.metodo.toLowerCase()},
+            con banda de confianza sobre el error histórico.
+          </li>
+          <li>
+            · <strong>Margen neto y ROI de marketing.</strong> Se retiraron. Dependían de una tabla
+            llamada &ldquo;Marketing&rdquo; que en realidad agrupa ventas menores a $190, no gasto
+            publicitario. Un ROI calculado sobre eso no es interpretable.
+          </li>
+        </ul>
       </div>
 
       <Tarjeta id="forecast" titulo="Ingresos reales y proyección" sub={fc.metodo}>
@@ -376,7 +387,7 @@ export function VistaForecast({ d }: { d: D }) {
       </Tarjeta>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Tarjeta id="tablafc" titulo="Detalle de la proyección" sub="meses proyectados en gris">
+        <Tarjeta id="tablafc" titulo="Detalle de la proyección" sub="los meses proyectados llevan (proy.)">
           <Tabla columnas={[
             { key: 'mes', titulo: 'Mes' },
             { key: 'real', titulo: 'Real', tipo: 'moneda' },
@@ -391,14 +402,24 @@ export function VistaForecast({ d }: { d: D }) {
           }))} />
         </Tarjeta>
 
-        <Tarjeta id="marketing" titulo="Gasto de marketing" sub="capturado manualmente">
-          <Columnas alto={220}
-            datos={(d.mkt?.filas ?? []).map((m: D) => ({ etiqueta: m.periodo, monto: m.monto }))}
-            series={[{ key: 'monto', nombre: 'Gasto', color: T.arena }]} />
-          <p className="text-[12px] mt-3" style={{ color: T.humo }}>
-            Esta tabla no viene de los Excel: se capturó dentro del Power BI. Se siembra con
-            <code className="font-mono mx-1">npm run db:marketing</code> y el cliente la actualiza cada mes.
-          </p>
+        <Tarjeta id="reclasificadas" titulo="Ventas reclasificadas" sub={recla.concepto}>
+          <Columnas alto={210}
+            datos={(recla.filas ?? []).map((m: D) => ({ etiqueta: m.periodo, monto: m.monto }))}
+            series={[{ key: 'monto', nombre: 'Monto', color: T.pizarra }]} />
+          <div className="mt-3 pt-3 border-t text-[12px] leading-relaxed"
+            style={{ borderColor: T.linea, color: T.humo }}>
+            <strong style={{ color: T.vino }}>Dato sin verificar.</strong> En el Power BI esta
+            tabla se llamaba &ldquo;Marketing&rdquo; y alimentaba el margen neto y el ROI. El
+            criterio real es agrupar ventas menores a $190, así que no representa inversión
+            publicitaria. Se muestra como referencia, no se usa en ningún cálculo.
+            {recla.filas?.length > 0 && (
+              <span className="block mt-2">
+                Julio salta a {mxn(num(recla.filas[recla.filas.length - 1]?.monto))} contra
+                un promedio previo mucho menor, y solo tiene 17 días de datos. Vale la pena
+                confirmar el criterio con quien lo capturó.
+              </span>
+            )}
+          </div>
         </Tarjeta>
       </div>
     </>

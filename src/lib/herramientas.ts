@@ -137,6 +137,15 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'generar_reporte',
+    description:
+      'Abre el reporte ejecutivo completo en PDF, con las 7 secciones y un resumen escrito. ' +
+      'Úsala cuando pidan: reporte, PDF, exportar, imprimir, "mándame el resumen", ' +
+      '"algo para la junta", "documento para el consejo". ' +
+      'Respeta los filtros que estén aplicados en ese momento.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'actualizar_tablero',
     description:
       'Cambia lo que el usuario ve en pantalla. Llámala SIEMPRE que pida ver, mostrar, ' +

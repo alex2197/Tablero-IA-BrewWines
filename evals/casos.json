@@ -1,28 +1,178 @@
 [
-  { "pregunta": "¿Cómo van las ventas?", "espera": ["consultar_metricas"] },
-  { "pregunta": "¿Cuánto vendí en junio?", "espera": ["consultar_metricas"] },
-  { "pregunta": "¿Cuál es mi margen bruto?", "espera": ["consultar_metricas"] },
-  { "pregunta": "Ranking de vendedores", "espera": ["consultar_metricas"] },
-  { "pregunta": "¿Cuáles son mis vinos más rentables?", "espera": ["consultar_metricas"] },
-  { "pregunta": "Compara CDMX contra Cancún", "espera": ["consultar_metricas"] },
-  { "pregunta": "¿Cuál es mi retención real?", "espera": ["consultar_retencion"] },
-  { "pregunta": "¿Cuántos clientes se me están yendo?", "espera": ["consultar_retencion"] },
-  { "pregunta": "¿Cuánto voy a vender los próximos 3 meses?", "espera": ["consultar_forecast"] },
-  { "pregunta": "Dame el pronóstico de ingresos", "espera": ["consultar_forecast"] },
-  { "pregunta": "¿Cuál es mi DSO?", "espera": ["consultar_cxc"] },
-  { "pregunta": "¿Qué porcentaje de mi facturación ya cobré?", "espera": ["consultar_cxc"] },
-  { "pregunta": "¿Quién me debe más?", "espera": ["consultar_cartera"] },
-  { "pregunta": "¿Cuánta cartera tengo vencida a más de 90 días?", "espera": ["consultar_cartera"] },
-  { "pregunta": "Muéstrame cómo está repartida mi cobranza", "espera": ["consultar_antiguedad_cartera"] },
-  { "pregunta": "¿Qué inventario está parado?", "espera": ["consultar_inventario_muerto"] },
-  { "pregunta": "¿Cuántas botellas tengo en cada bodega?", "espera": ["consultar_inventario_bodegas"] },
-  { "pregunta": "¿Qué clientes dejaron de comprarme?", "espera": ["consultar_clientes_dormidos"] },
-  { "pregunta": "¿Hay algo raro que deba revisar?", "espera": ["consultar_alertas"] },
-  { "pregunta": "¿Por qué bajó el margen?", "espera": ["consultar_alertas"] },
-  { "pregunta": "Llévame a la pestaña de Canales", "espera": ["actualizar_tablero"] },
-  { "pregunta": "Muéstrame solo Cancún", "espera": ["actualizar_tablero"] },
-  { "pregunta": "Filtra solo junio", "espera": ["actualizar_tablero"] },
-  { "pregunta": "Quita todos los filtros", "espera": ["actualizar_tablero"] },
-  { "pregunta": "¿Cuánto vendí en 2019?", "espera": [], "nota": "fuera del periodo: debe aclarar, no inventar" },
-  { "pregunta": "Hola", "espera": [], "nota": "saludo: no debe llamar herramientas" }
+  {
+    "pregunta": "¿Cómo van las ventas?",
+    "espera": [
+      "consultar_metricas"
+    ]
+  },
+  {
+    "pregunta": "¿Cuánto vendí en junio?",
+    "espera": [
+      "consultar_metricas"
+    ]
+  },
+  {
+    "pregunta": "¿Cuál es mi margen bruto?",
+    "espera": [
+      "consultar_metricas"
+    ]
+  },
+  {
+    "pregunta": "Ranking de vendedores",
+    "espera": [
+      "consultar_metricas"
+    ]
+  },
+  {
+    "pregunta": "¿Cuáles son mis vinos más rentables?",
+    "espera": [
+      "consultar_metricas"
+    ]
+  },
+  {
+    "pregunta": "Compara CDMX contra Cancún",
+    "espera": [
+      "consultar_metricas"
+    ]
+  },
+  {
+    "pregunta": "¿Cuál es mi retención real?",
+    "espera": [
+      "consultar_retencion"
+    ]
+  },
+  {
+    "pregunta": "¿Cuántos clientes se me están yendo?",
+    "espera": [
+      "consultar_retencion"
+    ]
+  },
+  {
+    "pregunta": "¿Cuánto voy a vender los próximos 3 meses?",
+    "espera": [
+      "consultar_forecast"
+    ]
+  },
+  {
+    "pregunta": "Dame el pronóstico de ingresos",
+    "espera": [
+      "consultar_forecast"
+    ]
+  },
+  {
+    "pregunta": "¿Cuál es mi DSO?",
+    "espera": [
+      "consultar_cxc"
+    ]
+  },
+  {
+    "pregunta": "¿Qué porcentaje de mi facturación ya cobré?",
+    "espera": [
+      "consultar_cxc"
+    ]
+  },
+  {
+    "pregunta": "¿Quién me debe más?",
+    "espera": [
+      "consultar_cartera"
+    ]
+  },
+  {
+    "pregunta": "¿Cuánta cartera tengo vencida a más de 90 días?",
+    "espera": [
+      "consultar_cartera"
+    ]
+  },
+  {
+    "pregunta": "Muéstrame cómo está repartida mi cobranza",
+    "espera": [
+      "consultar_antiguedad_cartera"
+    ]
+  },
+  {
+    "pregunta": "¿Qué inventario está parado?",
+    "espera": [
+      "consultar_inventario_muerto"
+    ]
+  },
+  {
+    "pregunta": "¿Cuántas botellas tengo en cada bodega?",
+    "espera": [
+      "consultar_inventario_bodegas"
+    ]
+  },
+  {
+    "pregunta": "¿Qué clientes dejaron de comprarme?",
+    "espera": [
+      "consultar_clientes_dormidos"
+    ]
+  },
+  {
+    "pregunta": "¿Hay algo raro que deba revisar?",
+    "espera": [
+      "consultar_alertas"
+    ]
+  },
+  {
+    "pregunta": "¿Por qué bajó el margen?",
+    "espera": [
+      "consultar_alertas"
+    ]
+  },
+  {
+    "pregunta": "Llévame a la pestaña de Canales",
+    "espera": [
+      "actualizar_tablero"
+    ]
+  },
+  {
+    "pregunta": "Muéstrame solo Cancún",
+    "espera": [
+      "actualizar_tablero"
+    ]
+  },
+  {
+    "pregunta": "Filtra solo junio",
+    "espera": [
+      "actualizar_tablero"
+    ]
+  },
+  {
+    "pregunta": "Quita todos los filtros",
+    "espera": [
+      "actualizar_tablero"
+    ]
+  },
+  {
+    "pregunta": "¿Cuánto vendí en 2019?",
+    "espera": [],
+    "nota": "fuera del periodo: debe aclarar, no inventar"
+  },
+  {
+    "pregunta": "Hola",
+    "espera": [],
+    "nota": "saludo: no debe llamar herramientas"
+  },
+  {
+    "pregunta": "¿Cuál es mi ROI de marketing?",
+    "espera": [],
+    "nota": "debe explicar que el dato no es gasto publicitario, no calcular un ROI"
+  },
+  {
+    "pregunta": "¿Cuánto gasté en publicidad este año?",
+    "espera": [],
+    "nota": "no hay dato de publicidad; debe decirlo en vez de usar la tabla reclasificada"
+  },
+  {
+    "pregunta": "Genérame un reporte para la junta",
+    "espera": [
+      "generar_reporte"
+    ]
+  },
+  {
+    "pregunta": "Necesito esto en PDF",
+    "espera": [
+      "generar_reporte"
+    ]
+  }
 ]

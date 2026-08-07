@@ -3,7 +3,7 @@ import {
   consultar, cartera, carteraAntiguedad, metricasCxC,
   inventarioSinMovimiento, inventarioPorBodega, resumenInventario,
   resumenClientes, clientesDormidos, retencionMensual,
-  marketing, forecast, contexto, type Filtros,
+  ventasReclasificadas, forecast, contexto, type Filtros,
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
@@ -123,10 +123,10 @@ export async function GET(req: NextRequest) {
 
       /* ---------- 7. FORECAST ---------- */
       case 'forecast': {
-        const [fc, mkt, kpis] = await Promise.all([
-          forecast(3), marketing(f), consultar({ metricas: M, filtros: f }),
+        const [fc, recla, kpis] = await Promise.all([
+          forecast(3), ventasReclasificadas(f), consultar({ metricas: M, filtros: f }),
         ]);
-        return Response.json({ ctx, fc, mkt, kpis: kpis.filas[0] ?? {} });
+        return Response.json({ ctx, fc, recla, kpis: kpis.filas[0] ?? {} });
       }
 
       default:

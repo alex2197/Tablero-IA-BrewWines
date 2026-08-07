@@ -59,6 +59,11 @@ export default function Tablero() {
             <h1 className="font-display text-xl font-extrabold tracking-tight">{empresa}</h1>
             <span className="etiqueta">Distribución de vinos</span>
             <span className="etiqueta ml-auto">{ctx?.hasta ? `corte ${ctx.hasta}` : ''}</span>
+            <a href={`/reporte?${new URLSearchParams({
+              ...(canal ? { canal } : {}), ...(categoria ? { categoria } : {}),
+              ...(vendedor ? { vendedor } : {}), ...(cliente ? { cliente } : {}),
+              ...(meses.length ? { meses: meses.join(',') } : {}),
+            })}`} className="etiqueta hover:underline">exportar pdf</a>
             <a href="/cargar" className="etiqueta hover:underline">actualizar datos</a>
             <button className="etiqueta hover:underline"
               onClick={async () => { await fetch('/api/login', { method: 'DELETE' }); location.href = '/login'; }}>

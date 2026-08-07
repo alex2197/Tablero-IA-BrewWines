@@ -92,12 +92,14 @@ CREATE INDEX idx_ventas_factura      ON ventas(tenant_id, factura);
 CREATE INDEX idx_cxc_vence           ON cuentas_por_cobrar(tenant_id, fecha_vence);
 CREATE INDEX idx_cxc_saldo           ON cuentas_por_cobrar(tenant_id, saldo_pendiente);
 
--- Marketing: capturado dentro de Power BI, no viene de los Excel.
--- Se siembra con scripts/marketing.ts y el cliente lo actualiza por CSV.
-CREATE TABLE marketing (
+-- Ventas reclasificadas.
+-- En el Power BI original esta tabla se llamaba "Marketing", pero no contenía
+-- gasto publicitario: agrupaba las ventas menores a $190 que el cliente pidió
+-- clasificar aparte. Se conserva el dato con el nombre correcto.
+CREATE TABLE ventas_reclasificadas (
   tenant_id TEXT NOT NULL REFERENCES tenants(id),
   periodo   TEXT NOT NULL,          -- 'YYYY-MM'
   monto     NUMERIC(14,2) NOT NULL,
-  campana   TEXT,
+  concepto  TEXT,
   PRIMARY KEY (tenant_id, periodo)
 );

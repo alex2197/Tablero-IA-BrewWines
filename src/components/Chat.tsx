@@ -15,6 +15,7 @@ const SUGERENCIAS = [
   '¿Quién me debe más?',
   'Llévame a Canales',
   '¿Qué debo revisar?',
+  'Genera el reporte para la junta',
 ];
 
 /** Convierte **negritas** en <strong>, escapando el resto. */
@@ -88,6 +89,9 @@ export default function Chat() {
             // Aquí es donde la IA mueve el tablero.
             aplicar(evt.estado as { vista?: Vista });
             if (evt.estado?.vista) destacarPanel(null);
+          } else if (evt.t === 'abrir') {
+            // El reporte se abre en otra pestaña para no perder la conversación
+            window.open(evt.url as string, '_blank', 'noopener');
           } else if (evt.t === 'fin') {
             setMensajes((m) => {
               const c = [...m];

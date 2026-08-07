@@ -11,7 +11,8 @@
     "db:schema": "tsx scripts/schema.ts",
     "db:cargar": "tsx scripts/cargar.ts",
     "evals": "tsx evals/correr.ts",
-    "db:marketing": "tsx scripts/marketing.ts"
+    "db:migrar": "tsx scripts/migrar.ts",
+    "db:reclasificadas": "tsx scripts/marketing.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

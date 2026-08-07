@@ -7,11 +7,11 @@ import {
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
-export const maxDuration = 10;
+export const maxDuration = 60;
 
 const claude = new Anthropic();
 const MODELO = 'claude-sonnet-5';
-const MAX_VUELTAS = 3;
+const MAX_VUELTAS = 6;
 
 function sistema(ctx: Awaited<ReturnType<typeof contexto>>) {
   return `Eres el analista de datos de ${ctx.empresa}, una distribuidora de vinos en México.
@@ -34,6 +34,10 @@ DIFERENCIAS CON EL POWER BI ANTERIOR (menciónalas si el usuario compara cifras)
   proyectada a meses futuros.
 - Cuentas por cobrar: antes no estaba relacionada al modelo, así que DSO y saldo ignoraban
   los filtros de categoría y vendedor. Ahora sí responden.
+- Margen neto y ROI de marketing: se retiraron. La tabla "Marketing" del Power BI no era
+  gasto publicitario, agrupaba ventas menores a $190 por un criterio de clasificación del
+  cliente. Si te preguntan por ROI de marketing, gasto en publicidad o margen neto, explica
+  esto y ofrece el margen bruto, que sí es correcto. NUNCA calcules un ROI con ese dato.
 
 REGLAS DE EXACTITUD
 - NUNCA inventes, estimes ni redondees a ojo una cifra. Todo número sale de una herramienta.
@@ -94,6 +98,8 @@ async function ejecutar(nombre: string, args: Record<string, unknown>) {
       return await metricasCxC({ desde: args.desde as string, hasta: args.hasta as string });
     case 'consultar_inventario_bodegas':
       return { bodegas: await inventarioPorBodega() };
+    case 'generar_reporte':
+      return { ok: true, abrir: '/reporte' };
     case 'actualizar_tablero':
       return { ok: true, estado_aplicado: args };
     default:
@@ -163,6 +169,9 @@ export async function POST(req: Request) {
 
             if (bloque.name === 'actualizar_tablero') {
               enviar({ t: 'accion', estado: bloque.input });
+            }
+            if (bloque.name === 'generar_reporte') {
+              enviar({ t: 'abrir', url: '/reporte' });
             }
 
             resultados.push({

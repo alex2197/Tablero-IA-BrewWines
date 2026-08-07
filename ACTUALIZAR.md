@@ -1,98 +1,121 @@
-# Actualización — carga de datos y seguridad
+# Actualización — corrección de "Marketing" + exportación a PDF
 
-## Qué cambió
+Dos cambios en un solo paquete.
 
-**1. Pantalla de carga (`/cargar`).** El cliente arrastra sus Excel, ve un reporte de
-validación, confirma, y el tablero se actualiza. Ya no dependes de correr scripts
-en tu laptop.
+---
 
-**2. Login con contraseña.** Todo el tablero y todos los endpoints quedan detrás de
-una sesión. Sin esto no puedes publicar en internet con datos reales de un cliente.
+## 1. Corrección de las métricas derivadas de "Marketing"
 
-**3. ETL unificado.** `src/lib/etl.ts` es ahora la única fuente de verdad. La lo usan
-tanto el script de terminal como el endpoint del navegador, así que no se pueden
-desincronizar.
+El cliente confirmó que esa tabla **no es gasto publicitario**: agrupa ventas
+menores a $190 según un criterio de clasificación propio. Eso invalidaba dos
+medidas del Power BI original:
+
+```dax
+Margen Neto   = Margen Bruto - Gasto Marketing
+ROI Marketing = Ingresos / Gasto Marketing
+```
+
+### Qué cambió
+
+| Antes | Ahora |
+|---|---|
+| Tabla `marketing` | Tabla `ventas_reclasificadas` |
+| Columna `campana` | Columna `concepto` |
+| KPI "Margen Neto" | **Margen bruto** (sin restas falsas) |
+| KPI "ROI Marketing" | **Tendencia mensual** |
+| Tarjeta "Gasto de marketing" | **Ventas reclasificadas**, con advertencia |
+
+El dato sigue visible como referencia, pero ya no alimenta ningún cálculo.
+
+**Sobre la métrica de reemplazo:** "Tendencia mensual" sale de la pendiente de la
+regresión del forecast. Dice en pesos cuánto crece o cae la venta cada mes. Es
+accionable y verificable, a diferencia del ROI anterior.
+
+El asistente también lo sabe: si preguntan por ROI de marketing o gasto en
+publicidad, explica que ese dato no existe en vez de inventar un número.
+
+---
+
+## 2. Exportación a PDF
+
+Nueva ruta **`/reporte`** con el reporte ejecutivo completo: 7 secciones, todas
+las gráficas, y un **resumen escrito por la IA** a partir de las cifras reales.
+
+### Cómo se usa
+
+- Botón **"exportar pdf"** en el encabezado del tablero
+- O pedírselo al asistente: *"genera el reporte para la junta"*
+
+En la página, el botón **Descargar PDF** abre el diálogo de impresión del
+navegador. Ahí eliges "Guardar como PDF".
+
+### El resumen ejecutivo
+
+Un endpoint (`/api/resumen`) junta las cifras de las 7 secciones y le pide al
+modelo un resumen con cuatro apartados fijos:
+
+- **Situación** — estado general del periodo
+- **Lo que va bien** — tres puntos con cifra
+- **Lo que requiere atención** — tres puntos con cifra y por qué importa
+- **Qué hacer** — tres acciones concretas, en orden de urgencia
+
+Todas las cifras vienen de consultas reales. El modelo redacta, no calcula.
+Si el resumen falla, el resto del reporte se genera igual.
+
+**Esto es lo que Power BI no puede hacer.** Un PDF con gráficas lo exporta
+cualquiera; un PDF que además explica qué está pasando y qué hacer, no.
+
+### Detalles de implementación
+
+Se usa el motor de impresión del navegador en vez de una librería de PDF:
+sin dependencias nuevas, sin costo de servidor, y funciona en el plan Hobby de
+Vercel. Las gráficas son SVG, así que salen nítidas a cualquier resolución.
+
+El CSS de impresión controla saltos de página por sección, evita cortar tablas
+y gráficas a la mitad, y fuerza los colores del tema (por defecto los navegadores
+los quitan al imprimir).
+
+Los filtros activos se heredan: si estás viendo solo Cancún, el reporte sale
+filtrado a Cancún y lo dice en la portada.
+
+---
 
 ## Pasos para actualizar
 
 ```cmd
 npm install
+npm run db:migrar
+npm run build
+git add .
+git commit -m "Corrige metricas de Marketing y agrega exportacion a PDF"
+git push
 ```
 
-Agrega estas tres líneas a **`.env` y `.env.local`** (ambos):
+`db:migrar` renombra la tabla **sin borrar datos**. No hace falta recargar los Excel.
 
-```
-APP_PASSWORD=la-contrasena-que-quieras
-SESSION_SECRET=pega-aqui-una-cadena-larga
-TENANT_ID=teravino
-```
+> Si prefieres empezar de cero: `npm run db:schema`, `npm run db:cargar`
+> y `npm run db:reclasificadas` (antes `db:marketing`).
 
-Genera el secreto con:
+### Para probar
 
-```cmd
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+1. Abre el tablero y dale a **exportar pdf**
+2. Espera unos segundos a que aparezca el resumen ejecutivo
+3. **Descargar PDF** → guardar
+4. Prueba también con filtros puestos, por ejemplo solo Cancún
+5. Pídeselo al chat: *"genera el reporte para la junta"*
 
-Luego:
+> `/api/resumen` tiene `maxDuration = 30`. En plan Hobby el tope es 10 segundos:
+> **bájalo a 10** en ese archivo antes de publicar, o el resumen se cortará. El
+> resto del reporte funciona igual aunque el resumen falle.
 
-```cmd
-npm run dev
-```
+---
 
-Te va a mandar a `/login`. Entra con tu `APP_PASSWORD`.
+## Pendiente con el cliente
 
-> **Si no defines `SESSION_SECRET`, el login se desactiva** y todo queda abierto.
-> Es a propósito para no bloquearte en local, pero **en Vercel es obligatorio**.
+Vale la pena preguntar **por qué** pidieron esa clasificación. Si resulta ser
+muestras o degustaciones, la métrica correcta sería *costo de muestreo comercial*,
+y eso sí conviene medirlo bien con su propia tarjeta.
 
-## Cómo funciona la carga
-
-1. **Arrastras los 6 Excel** — la pantalla marca cuáles ya pusiste y cuáles faltan
-2. **"Revisar archivos"** — parsea y valida sin tocar la base. Muestra filas válidas,
-   filas omitidas y avisos por archivo
-3. **Confirmación con contexto** — te dice el periodo detectado y la venta total,
-   para que verifiques que son los datos correctos antes de reemplazar nada
-4. **"Confirmar y cargar"** — escribe todo dentro de una transacción
-
-Si algo falla a la mitad, se hace ROLLBACK. **Nunca quedan datos parciales.**
-
-### Validaciones que hace
-
-- Archivos faltantes o vacíos
-- Hojas con nombre distinto al esperado (avisa cuál usó y cuáles había)
-- Filas sin llave o sin fecha, que se omiten
-- Si más de la mitad de las filas fallan, avisa que probablemente cambiaron los
-  encabezados y te muestra los que detectó
-
-## Dar de alta un cliente nuevo
-
-Ahora toma minutos:
-
-```cmd
-:: opción A: desde el navegador
-:: cambia TENANT_ID en las variables y sube sus Excel en /cargar
-
-:: opción B: desde terminal
-npx tsx scripts/cargar.ts ./datos-cliente2/ cliente2 "Nombre del Cliente"
-```
-
-Todas las tablas llevan `tenant_id` y todas las consultas lo filtran, así que los
-datos de dos clientes nunca se mezclan.
-
-## Antes de publicar en Vercel
-
-- [ ] `SESSION_SECRET` y `APP_PASSWORD` en las variables de entorno de Vercel
-- [ ] `APP_PASSWORD` distinta de la de desarrollo
-- [ ] Rotar el password de Neon si alguna vez lo compartiste
-- [ ] Rotar la API key de Anthropic
-- [ ] En plan gratuito: bajar `maxDuration` a 10 en `api/chat` y `api/cargar`
-
-> **Límite de tamaño.** Vercel acepta hasta ~4.5 MB por petición en serverless.
-> Tus archivos suman ~1 MB, así que va sobrado. Si un cliente tiene Excel más
-> pesados, habrá que subirlos a almacenamiento y procesarlos aparte.
-
-## Siguiente decisión
-
-El login actual es **una contraseña compartida**, suficiente para demos y para un
-cliente. Cuando tengas tres o más, conviene migrar a Clerk para tener usuarios
-individuales, roles y que cada quien vea solo su tenant. Es un cambio de medio día
-porque el middleware y el aislamiento por `tenant_id` ya están puestos.
+También revisar julio: **$359,758** contra un promedio previo mucho menor, y con
+solo 17 días de datos. Coincide con la factura anómala de $2.2M vendida casi al
+costo — probablemente el mismo evento contado dos veces.

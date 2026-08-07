@@ -1,6 +1,10 @@
 /**
- * Siembra la tabla Marketing con los valores extraídos del modelo de Power BI.
- * El cliente los actualiza mensualmente.
+ * Siembra la tabla de ventas reclasificadas con los valores extraídos del
+ * modelo de Power BI (donde la tabla se llamaba "Marketing").
+ *
+ * IMPORTANTE: estos montos NO son gasto publicitario. Son ventas menores a
+ * $190 que el cliente pidió agrupar aparte. Confirmar el criterio antes de
+ * usarlos para cualquier conclusión de negocio.
  *   npx tsx scripts/marketing.ts
  */
 import 'dotenv/config';
@@ -20,15 +24,15 @@ const FILAS: [string, number][] = [
 ];
 
 async function main() {
-  await pool.query('DELETE FROM marketing WHERE tenant_id = $1', [TENANT]);
+  await pool.query('DELETE FROM ventas_reclasificadas WHERE tenant_id = $1', [TENANT]);
   for (const [periodo, monto] of FILAS) {
     await pool.query(
-      `INSERT INTO marketing (tenant_id, periodo, monto, campana)
+      `INSERT INTO ventas_reclasificadas (tenant_id, periodo, monto, concepto)
        VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-      [TENANT, periodo, monto, 'General']
+      [TENANT, periodo, monto, 'Ventas menores a $190']
     );
   }
-  console.log(`marketing: ${FILAS.length} periodos`);
+  console.log(`ventas_reclasificadas: ${FILAS.length} periodos`);
   await pool.end();
 }
 main().catch(e => { console.error(e); process.exit(1); });

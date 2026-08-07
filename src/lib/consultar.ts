@@ -362,17 +362,30 @@ export async function inventarioSinMovimiento(limite = 15) {
 }
 
 /* ================================================================== */
-/* MARKETING                                                           */
+/* VENTAS RECLASIFICADAS                                               */
 /* ================================================================== */
 
-export async function marketing(f: Filtros = {}) {
+/**
+ * En el Power BI original esta tabla se llamaba "Marketing" y alimentaba
+ * las medidas "Margen Neto" y "ROI Marketing". No es gasto publicitario:
+ * son ventas menores a $190 que el cliente pidió agrupar aparte.
+ * Se expone como dato informativo, nunca como gasto.
+ */
+export async function ventasReclasificadas(f: Filtros = {}) {
   const { rows } = await pool.query(
-    `SELECT periodo, monto::float8, campana FROM marketing
+    `SELECT periodo, monto::float8, concepto FROM ventas_reclasificadas
      WHERE tenant_id = $1 ORDER BY periodo`, [TENANT]
   );
   const filtrado = f.meses?.length ? rows.filter(r => f.meses!.includes(r.periodo)) : rows;
-  const gasto = filtrado.reduce((a, r) => a + r.monto, 0);
-  return { filas: rows, gasto };
+  return {
+    filas: rows,
+    monto: filtrado.reduce((a, r) => a + r.monto, 0),
+    concepto: rows[0]?.concepto ?? 'Sin concepto',
+    advertencia:
+      'Estos montos NO son gasto de marketing. Agrupan ventas menores a $190 ' +
+      'según un criterio de clasificación del cliente. No usar para calcular ' +
+      'margen neto ni retorno de inversión publicitaria.',
+  };
 }
 
 /* ================================================================== */
