@@ -5,7 +5,7 @@ import {
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+export const maxDuration = 10;
 
 const claude = new Anthropic();
 
