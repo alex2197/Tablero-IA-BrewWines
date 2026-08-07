@@ -7,11 +7,11 @@ import {
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 10;
 
 const claude = new Anthropic();
 const MODELO = 'claude-sonnet-5';
-const MAX_VUELTAS = 6;
+const MAX_VUELTAS = 3;
 
 function sistema(ctx: Awaited<ReturnType<typeof contexto>>) {
   return `Eres el analista de datos de ${ctx.empresa}, una distribuidora de vinos en México.
