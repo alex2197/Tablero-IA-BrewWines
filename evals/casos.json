@@ -1,0 +1,22 @@
+[
+  { "pregunta": "¿Cómo van las ventas?", "espera": ["consultar_metricas"] },
+  { "pregunta": "¿Cuánto vendí en junio?", "espera": ["consultar_metricas"] },
+  { "pregunta": "¿Quién me debe más?", "espera": ["consultar_cartera"] },
+  { "pregunta": "¿Cuánta cartera tengo vencida a más de 90 días?", "espera": ["consultar_cartera"] },
+  { "pregunta": "Muéstrame cómo está repartida mi cobranza", "espera": ["consultar_antiguedad_cartera"] },
+  { "pregunta": "¿Qué inventario está parado?", "espera": ["consultar_inventario_muerto"] },
+  { "pregunta": "¿Qué productos no se venden?", "espera": ["consultar_inventario_muerto"] },
+  { "pregunta": "¿Qué clientes dejaron de comprarme?", "espera": ["consultar_clientes_dormidos"] },
+  { "pregunta": "¿Hay algo raro que deba revisar?", "espera": ["consultar_alertas"] },
+  { "pregunta": "¿Por qué bajó el margen?", "espera": ["consultar_alertas"] },
+  { "pregunta": "Muéstrame solo Cancún", "espera": ["actualizar_tablero"] },
+  { "pregunta": "Llévame a la pestaña de cobranza", "espera": ["actualizar_tablero"] },
+  { "pregunta": "Quita todos los filtros", "espera": ["actualizar_tablero"] },
+  { "pregunta": "Ranking de vendedores", "espera": ["consultar_metricas"] },
+  { "pregunta": "¿Cuáles son mis vinos más rentables?", "espera": ["consultar_metricas"] },
+  { "pregunta": "¿Cuál es mi ticket promedio?", "espera": ["consultar_metricas"] },
+  { "pregunta": "Compara CDMX contra Cancún", "espera": ["consultar_metricas"] },
+  { "pregunta": "¿Cuántas botellas vendí este año?", "espera": ["consultar_metricas"] },
+  { "pregunta": "¿Cuánto vendí en 2019?", "espera": [], "nota": "fuera del periodo: debe aclarar, no inventar" },
+  { "pregunta": "Hola", "espera": [], "nota": "saludo: no debe llamar herramientas" }
+]
