@@ -14,7 +14,8 @@
     "db:migrar": "tsx scripts/migrar.ts",
     "db:reclasificadas": "tsx scripts/marketing.ts",
     "limite": "tsx scripts/limite.ts",
-    "acceso": "tsx scripts/acceso.ts"
+    "acceso": "tsx scripts/acceso.ts",
+    "db:renombrar": "tsx scripts/renombrar.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

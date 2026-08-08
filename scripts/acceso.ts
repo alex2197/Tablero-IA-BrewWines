@@ -16,7 +16,7 @@ import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const [accion, arg] = process.argv.slice(2);
-const POR_DEFECTO = process.env.TENANT_ID ?? 'teravino';
+const POR_DEFECTO = process.env.TENANT_ID ?? 'brewwines';
 
 /** El último argumento es el tenant si no es un número ni parte del comando. */
 function tenantDe(): string {

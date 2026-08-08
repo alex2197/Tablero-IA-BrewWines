@@ -9,7 +9,7 @@ import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const nuevo = process.argv[2] ? Number(process.argv[2]) : null;
-const TENANT = process.argv[3] ?? process.env.TENANT_ID ?? 'teravino';
+const TENANT = process.argv[3] ?? process.env.TENANT_ID ?? 'brewwines';
 
 async function main() {
   if (nuevo != null) {

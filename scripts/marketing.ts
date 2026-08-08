@@ -11,7 +11,7 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const TENANT = process.argv[2] ?? 'teravino';
+const TENANT = process.argv[2] ?? 'brewwines';
 
 const FILAS: [string, number][] = [
   ['2026-01', 17522.58],

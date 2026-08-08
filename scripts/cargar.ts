@@ -9,8 +9,8 @@ import { Pool } from 'pg';
 import { analizar, escribir, type ArchivoEntrada } from '../src/lib/etl';
 
 const RUTA = process.argv[2] ?? './datos/';
-const TENANT = process.argv[3] ?? process.env.TENANT_ID ?? 'teravino';
-const NOMBRE = process.argv[4] ?? process.env.NEXT_PUBLIC_EMPRESA ?? 'Teravino';
+const TENANT = process.argv[3] ?? process.env.TENANT_ID ?? 'brewwines';
+const NOMBRE = process.argv[4] ?? process.env.NEXT_PUBLIC_EMPRESA ?? 'Brew Wines';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 

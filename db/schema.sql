@@ -10,7 +10,7 @@ CREATE TABLE tenants (
   giro   TEXT,
   creado TIMESTAMPTZ DEFAULT now(),
   -- Operaciones con IA permitidas por día. Se ajusta por cliente con:
-  --   UPDATE tenants SET limite_ia_diario = 100 WHERE id = 'teravino';
+  --   UPDATE tenants SET limite_ia_diario = 100 WHERE id = 'brewwines';
   limite_ia_diario INTEGER DEFAULT 50
 );
 

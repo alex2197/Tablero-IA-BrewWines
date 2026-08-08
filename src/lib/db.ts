@@ -14,4 +14,4 @@ export const pool =
 if (process.env.NODE_ENV !== 'production') g._pool = pool;
 
 /** Tenant activo. Cuando agregues Clerk, esto sale de la sesión del usuario. */
-export const TENANT = process.env.TENANT_ID ?? 'teravino';
+export const TENANT = process.env.TENANT_ID ?? 'brewwines';
