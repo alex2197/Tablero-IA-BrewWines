@@ -28,7 +28,10 @@ function colorConsumo(agotado: boolean, pct: number) {
 /** Convierte **negritas** en <strong>, escapando el resto. */
 function formatear(t: string) {
   const esc = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return esc.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return esc
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/_(.+?)_/g, '<em style="opacity:.6;font-size:12px">$1</em>')
+    .replace(/\n/g, '<br>');
 }
 
 export default function Chat() {
@@ -43,17 +46,26 @@ export default function Chat() {
   const [ocupado, setOcupado] = useState(false);
   const [herramienta, setHerramienta] = useState<string | null>(null);
   const [cupo, setCupo] = useState<{
-    restantes: number; limite: number; usadas?: number;
-    pct?: number; tokensHoy?: number; tokensMax?: number | null;
+    restantes: number; limite: number; usadas: number; pct: number;
+    tokensHoy?: number; tokensMax?: number | null;
     motivo?: 'consultas' | 'tokens';
   } | null>(null);
   const [sinCupo, setSinCupo] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
+  /** Relee el cupo del servidor. Se usa al cargar y después de cancelar. */
+  const refrescarCupo = () =>
     fetch('/api/cupo').then(r => r.json())
-      .then(j => { if (!j.error) { setCupo(j); setSinCupo(j.restantes <= 0); } })
+      .then(j => { if (!j.error) { setCupo(j); setSinCupo(j.restantes <= 0 || j.pct >= 100); } })
       .catch(() => {});
-  }, []);
+
+  /** Corta la petición en curso. El servidor registra solo lo que alcanzó a gastar. */
+  function detener() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }
+
+  useEffect(() => { refrescarCupo(); }, []);
 
   const finRef = useRef<HTMLDivElement>(null);
   useEffect(() => { finRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensajes, herramienta]);
@@ -69,16 +81,20 @@ export default function Chat() {
     // El historial que ve la API solo lleva rol + contenido plano.
     const historial = nuevos.map((m) => ({ role: m.rol, content: m.texto }));
 
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensajes: historial }),
+        signal: ctrl.signal,
       });
       if (res.status === 429) {
         const j = await res.json();
         setSinCupo(true);
-        setCupo({ restantes: 0, limite: j.limite ?? 0 });
+        setCupo({ restantes: 0, limite: j.limite ?? 0, usadas: j.usadas ?? 0, pct: 100 });
         setMensajes(m => {
           const c = [...m];
           c[c.length - 1] = { rol: 'assistant', texto: j.mensaje ?? 'Límite diario alcanzado.' };
@@ -142,12 +158,28 @@ export default function Chat() {
         }
       }
     } catch (e) {
-      setMensajes((m) => {
-        const c = [...m];
-        c[c.length - 1] = { rol: 'assistant', texto: `No pude conectarme: ${(e as Error).message}` };
-        return c;
-      });
+      if ((e as Error).name === 'AbortError') {
+        // Se conserva lo que alcanzó a escribir y se marca como cancelada.
+        setMensajes((m) => {
+          const c = [...m];
+          const parcial = c[c.length - 1]?.texto ?? '';
+          c[c.length - 1] = {
+            rol: 'assistant',
+            texto: parcial ? parcial + '\n\n_Consulta cancelada._' : '_Consulta cancelada._',
+          };
+          return c;
+        });
+        // El servidor ya ajustó el cupo: se relee para que la barra sea exacta.
+        await refrescarCupo();
+      } else {
+        setMensajes((m) => {
+          const c = [...m];
+          c[c.length - 1] = { rol: 'assistant', texto: `No pude conectarme: ${(e as Error).message}` };
+          return c;
+        });
+      }
     } finally {
+      abortRef.current = null;
       setOcupado(false);
       setHerramienta(null);
     }
@@ -200,6 +232,13 @@ export default function Chat() {
             consultando {herramienta.replace('consultar_', '').replace(/_/g, ' ')}…
           </div>
         )}
+        {ocupado && (
+          <button onClick={detener}
+            className="self-start font-mono text-[10px] uppercase tracking-widest hover:underline"
+            style={{ color: 'var(--color-humo)' }}>
+            detener consulta
+          </button>
+        )}
         <div ref={finRef} />
       </div>
 
@@ -228,16 +267,26 @@ export default function Chat() {
           aria-label="Pregunta"
           className="flex-1 resize-none border border-linea2 rounded-lg px-2.5 py-2 text-[13.5px] max-h-24 focus:outline-none focus:border-jade disabled:bg-papel"
         />
-        <button
-          onClick={() => enviar(entrada)} disabled={ocupado || sinCupo || !entrada.trim()}
-          aria-label="Enviar"
-          className="bg-tinta text-white w-[33px] h-[33px] rounded-lg grid place-items-center shrink-0 hover:bg-jade disabled:opacity-40 transition-colors"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14M13 6l6 6-6 6" />
-          </svg>
-        </button>
+        {ocupado ? (
+          <button onClick={detener} aria-label="Detener consulta" title="Detener consulta"
+            className="text-white w-[33px] h-[33px] rounded-lg grid place-items-center shrink-0 transition-colors"
+            style={{ background: 'var(--color-rojo)' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            onClick={() => enviar(entrada)} disabled={sinCupo || !entrada.trim()}
+            aria-label="Enviar"
+            className="bg-tinta text-white w-[33px] h-[33px] rounded-lg grid place-items-center shrink-0 hover:bg-jade disabled:opacity-40 transition-colors"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {cupo && (
@@ -248,16 +297,17 @@ export default function Chat() {
               Consumo de hoy
             </span>
             <span className="font-mono text-[10px] num"
-              style={{ color: colorConsumo(sinCupo, cupo.pct ?? 0) }}>
-              {sinCupo ? 'agotado' : `${cupo.pct ?? 0}%`}
+              style={{ color: colorConsumo(sinCupo, cupo.pct) }}>
+              {sinCupo ? 'agotado' : `${cupo.pct}%`}
             </span>
           </div>
 
           <div className="h-1.5 w-full" style={{ background: 'var(--color-linea)' }}>
             <div className="h-1.5 transition-[width] duration-500"
               style={{
-                width: `${Math.min(100, cupo.pct ?? 0)}%`,
-                background: colorConsumo(sinCupo, cupo.pct ?? 0),
+                // Un mínimo de 2% para que se note que ya hubo consumo
+                width: `${cupo.pct > 0 ? Math.max(2, Math.min(100, cupo.pct)) : 0}%`,
+                background: colorConsumo(sinCupo, cupo.pct),
               }} />
           </div>
 
@@ -267,7 +317,7 @@ export default function Chat() {
               ? (cupo.motivo === 'tokens'
                   ? 'Consumo diario agotado · se reinicia a medianoche'
                   : `Límite de ${cupo.limite} consultas alcanzado · se reinicia a medianoche`)
-              : `${cupo.usadas ?? 0} de ${cupo.limite} consultas`}
+              : `${cupo.usadas} de ${cupo.limite} consultas`}
           </p>
         </div>
       )}

@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS } from '@/lib/herramientas';
-import { consumir, COSTO, registrarTokens, acumular, CONSUMO_CERO, estadoLimite, type Consumo } from '@/lib/limite';
+import {
+  consumir, COSTO, registrarTokens, acumular, CONSUMO_CERO,
+  estadoLimite, devolver, type Consumo,
+} from '@/lib/limite';
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
@@ -133,6 +136,12 @@ export async function POST(req: Request) {
   const ctx = await contexto();
   const codificador = new TextEncoder();
 
+  // Fuera del stream para que `cancel` también los vea.
+  let consumo: Consumo = { ...CONSUMO_CERO };
+  let llamadas = 0;
+  let cancelado = false;
+  let enCurso: { abort: () => void } | null = null;
+
   const stream = new ReadableStream({
     async start(control) {
       const enviar = (evt: unknown) =>
@@ -140,12 +149,12 @@ export async function POST(req: Request) {
 
       const historial: Anthropic.MessageParam[] = [...mensajes];
       const trazas: { herramienta: string; argumentos: unknown; sql?: string }[] = [];
-      let consumo: Consumo = { ...CONSUMO_CERO };
-      let llamadas = 0;
 
       try {
         for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
-          const respuesta = await claude.messages.stream({
+          if (cancelado) return;
+
+          const respuesta = claude.messages.stream({
             model: MODELO,
             max_tokens: 2000,
             // El caché ahorra bastante: system y tools se repiten en cada vuelta.
@@ -158,12 +167,17 @@ export async function POST(req: Request) {
             messages: historial,
           });
 
+          enCurso = respuesta;
+
           // Solo streameamos texto al usuario; los tool_use se anuncian aparte.
-          respuesta.on('text', (delta) => enviar({ t: 'texto', delta }));
+          respuesta.on('text', (delta) => { if (!cancelado) enviar({ t: 'texto', delta }); });
 
           const final = await respuesta.finalMessage();
+          enCurso = null;
           consumo = acumular(consumo, final.usage);
           llamadas++;
+
+          if (cancelado) return;
 
           if (final.stop_reason !== 'tool_use') {
             await registrarTokens(consumo, llamadas);
@@ -178,6 +192,7 @@ export async function POST(req: Request) {
 
           const resultados: Anthropic.ToolResultBlockParam[] = [];
           for (const bloque of final.content) {
+            if (cancelado) return;
             if (bloque.type !== 'tool_use') continue;
 
             enviar({ t: 'herramienta', nombre: bloque.name });
@@ -216,11 +231,24 @@ export async function POST(req: Request) {
         enviar({ t: 'fin', trazas });
         control.close();
       } catch (e) {
+        if (cancelado) return;
         // Se registra igual: los tokens ya se consumieron aunque la respuesta falle.
         await registrarTokens(consumo, llamadas).catch(() => {});
         enviar({ t: 'error', mensaje: (e as Error).message });
         control.close();
       }
+    },
+
+    /**
+     * El navegador cortó la conexión (el usuario tocó "Detener").
+     * Se aborta la llamada al modelo para dejar de generar, se registra lo que
+     * alcanzó a consumirse, y si no hubo ninguna respuesta se devuelve el cupo.
+     */
+    async cancel() {
+      cancelado = true;
+      try { enCurso?.abort(); } catch { /* ya había terminado */ }
+      await registrarTokens(consumo, llamadas).catch(() => {});
+      if (llamadas === 0) await devolver(COSTO.chat).catch(() => {});
     },
   });
 

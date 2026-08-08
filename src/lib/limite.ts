@@ -18,6 +18,8 @@ export interface EstadoLimite {
   motivo?: 'consultas' | 'tokens';
   tokensHoy?: number;
   tokensMax?: number | null;
+  /** Porcentaje consumido del día: el mayor de los dos topes. 0 a 100. */
+  pct: number;
 }
 
 /** Tokens reportados por la API en cada respuesta. */
@@ -91,7 +93,21 @@ export async function estadoLimite(tenant = TENANT): Promise<EstadoLimite> {
     restantes: Math.max(0, topes.consultas - usadas),
     motivo: !porConsultas ? 'consultas' : !porTokens ? 'tokens' : undefined,
     tokensHoy, tokensMax: topes.tokens,
+    pct: calcularPct(usadas, topes.consultas, tokensHoy, topes.tokens),
   };
+}
+
+/**
+ * Porcentaje consumido del día. Toma el mayor de los dos topes, porque el
+ * que va más avanzado es el que va a detener al usuario.
+ */
+export function calcularPct(
+  usadas: number, limite: number,
+  tokensHoy: number, tokensMax: number | null
+): number {
+  const pConsultas = limite > 0 ? (usadas / limite) * 100 : 0;
+  const pTokens = tokensMax && tokensMax > 0 ? (tokensHoy / tokensMax) * 100 : 0;
+  return Math.min(100, Math.round(Math.max(pConsultas, pTokens)));
 }
 
 /**
@@ -128,7 +144,13 @@ export async function consumir(costo = 1, tenant = TENANT): Promise<EstadoLimite
   }
 
   const usadas = rows[0].consultas;
-  return { permitido: true, usadas, limite, restantes: Math.max(0, limite - usadas) };
+  const tokensHoy = await tokensHoyDe(tenant);
+  return {
+    permitido: true, usadas, limite,
+    restantes: Math.max(0, limite - usadas),
+    tokensHoy, tokensMax: topes.tokens,
+    pct: calcularPct(usadas, limite, tokensHoy, topes.tokens),
+  };
 }
 
 
@@ -149,5 +171,18 @@ export async function registrarTokens(c: Consumo, llamadas = 1, tenant = TENANT)
        tok_cache_escritura = uso_ia.tok_cache_escritura + EXCLUDED.tok_cache_escritura,
        tok_cache_lectura   = uso_ia.tok_cache_lectura + EXCLUDED.tok_cache_lectura`,
     [tenant, hoyMx(), llamadas, c.entrada, c.salida, c.cacheEscritura, c.cacheLectura]
+  );
+}
+
+/**
+ * Devuelve cupo de operaciones. Se usa cuando el usuario cancela antes de que
+ * la API haya respondido: no se consumió nada, así que no debe cobrarse.
+ * Los tokens ya gastados nunca se devuelven, porque ya se pagaron.
+ */
+export async function devolver(costo = 1, tenant = TENANT) {
+  await pool.query(
+    `UPDATE uso_ia SET consultas = GREATEST(0, consultas - $1)
+     WHERE tenant_id = $2 AND fecha = $3::date`,
+    [costo, tenant, hoyMx()]
   );
 }
