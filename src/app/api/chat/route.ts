@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS } from '@/lib/herramientas';
-import { consumir, COSTO } from '@/lib/limite';
+import { consumir, COSTO, registrarTokens, acumular, CONSUMO_CERO, estadoLimite, type Consumo } from '@/lib/limite';
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
@@ -122,8 +122,10 @@ export async function POST(req: Request) {
   if (!cupo.permitido) {
     return Response.json({
       error: 'limite_alcanzado',
-      mensaje: `Llegaste al límite de ${cupo.limite} consultas de hoy. ` +
-               `El contador se reinicia a medianoche.`,
+      mensaje: cupo.motivo === 'tokens'
+      ? 'Se alcanzó el presupuesto de consumo de hoy. El contador se reinicia a medianoche.'
+      : `Llegaste al límite de ${cupo.limite} consultas de hoy. ` +
+        `El contador se reinicia a medianoche.`,
       ...cupo,
     }, { status: 429 });
   }
@@ -138,6 +140,8 @@ export async function POST(req: Request) {
 
       const historial: Anthropic.MessageParam[] = [...mensajes];
       const trazas: { herramienta: string; argumentos: unknown; sql?: string }[] = [];
+      let consumo: Consumo = { ...CONSUMO_CERO };
+      let llamadas = 0;
 
       try {
         for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
@@ -158,9 +162,14 @@ export async function POST(req: Request) {
           respuesta.on('text', (delta) => enviar({ t: 'texto', delta }));
 
           const final = await respuesta.finalMessage();
+          consumo = acumular(consumo, final.usage);
+          llamadas++;
 
           if (final.stop_reason !== 'tool_use') {
-            enviar({ t: 'fin', trazas, cupo });
+            await registrarTokens(consumo, llamadas);
+            // Se recalcula después de registrar: así la barra refleja el consumo real.
+            const cupoFinal = await estadoLimite().catch(() => cupo);
+            enviar({ t: 'fin', trazas, cupo: cupoFinal });
             control.close();
             return;
           }
@@ -207,6 +216,8 @@ export async function POST(req: Request) {
         enviar({ t: 'fin', trazas });
         control.close();
       } catch (e) {
+        // Se registra igual: los tokens ya se consumieron aunque la respuesta falle.
+        await registrarTokens(consumo, llamadas).catch(() => {});
         enviar({ t: 'error', mensaje: (e as Error).message });
         control.close();
       }

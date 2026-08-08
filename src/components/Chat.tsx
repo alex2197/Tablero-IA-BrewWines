@@ -18,6 +18,13 @@ const SUGERENCIAS = [
   'Genera el reporte para la junta',
 ];
 
+/** Verde mientras hay holgura, ámbar al 75%, rojo al 90% o agotado. */
+function colorConsumo(agotado: boolean, pct: number) {
+  if (agotado || pct >= 90) return 'var(--color-rojo)';
+  if (pct >= 75) return 'var(--color-ambar)';
+  return 'var(--color-jade)';
+}
+
 /** Convierte **negritas** en <strong>, escapando el resto. */
 function formatear(t: string) {
   const esc = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -35,7 +42,11 @@ export default function Chat() {
   const [entrada, setEntrada] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [herramienta, setHerramienta] = useState<string | null>(null);
-  const [cupo, setCupo] = useState<{ restantes: number; limite: number } | null>(null);
+  const [cupo, setCupo] = useState<{
+    restantes: number; limite: number; usadas?: number;
+    pct?: number; tokensHoy?: number; tokensMax?: number | null;
+    motivo?: 'consultas' | 'tokens';
+  } | null>(null);
   const [sinCupo, setSinCupo] = useState(false);
 
   useEffect(() => {
@@ -229,13 +240,41 @@ export default function Chat() {
         </button>
       </div>
 
+      {cupo && (
+        <div className="px-5 pb-3">
+          <div className="flex justify-between items-baseline mb-1.5">
+            <span className="font-mono text-[9.5px] uppercase tracking-widest"
+              style={{ color: 'var(--color-humo)' }}>
+              Consumo de hoy
+            </span>
+            <span className="font-mono text-[10px] num"
+              style={{ color: colorConsumo(sinCupo, cupo.pct ?? 0) }}>
+              {sinCupo ? 'agotado' : `${cupo.pct ?? 0}%`}
+            </span>
+          </div>
+
+          <div className="h-1.5 w-full" style={{ background: 'var(--color-linea)' }}>
+            <div className="h-1.5 transition-[width] duration-500"
+              style={{
+                width: `${Math.min(100, cupo.pct ?? 0)}%`,
+                background: colorConsumo(sinCupo, cupo.pct ?? 0),
+              }} />
+          </div>
+
+          <p className="font-mono text-[9.5px] mt-1.5 leading-relaxed"
+            style={{ color: sinCupo ? 'var(--color-rojo)' : 'var(--color-humo)' }}>
+            {sinCupo
+              ? (cupo.motivo === 'tokens'
+                  ? 'Consumo diario agotado · se reinicia a medianoche'
+                  : `Límite de ${cupo.limite} consultas alcanzado · se reinicia a medianoche`)
+              : `${cupo.usadas ?? 0} de ${cupo.limite} consultas`}
+          </p>
+        </div>
+      )}
+
       <p className="font-mono text-[10px] text-center px-5 pb-3 leading-relaxed"
-        style={{ color: sinCupo ? 'var(--color-rojo)' : cupo && cupo.restantes <= 5 ? 'var(--color-ambar)' : 'var(--color-humo)' }}>
-        {sinCupo
-          ? `Límite de ${cupo?.limite ?? ''} consultas diarias alcanzado · se reinicia a medianoche`
-          : cupo && cupo.restantes <= 10
-            ? `Te quedan ${cupo.restantes} de ${cupo.limite} consultas hoy`
-            : 'Las cifras salen de consultas reales a la base de datos'}
+        style={{ color: 'var(--color-humo)' }}>
+        Las cifras salen de consultas reales a la base de datos
       </p>
     </aside>
   );

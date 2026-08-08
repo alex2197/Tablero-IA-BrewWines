@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { consumir, COSTO } from '@/lib/limite';
+import { consumir, COSTO, registrarTokens, acumular, CONSUMO_CERO } from '@/lib/limite';
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, metricasCxC, resumenInventario, resumenClientes,
@@ -106,6 +106,8 @@ Tres viñetas, cada una con su cifra y por qué importa.
 Tres acciones concretas, en orden de urgencia. Una línea cada una.`,
       messages: [{ role: 'user', content: JSON.stringify(datos) }],
     });
+
+    await registrarTokens(acumular(CONSUMO_CERO, r.usage), 1);
 
     const texto = r.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
     return Response.json({ texto, ctx });

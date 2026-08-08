@@ -15,7 +15,8 @@
     "db:reclasificadas": "tsx scripts/marketing.ts",
     "limite": "tsx scripts/limite.ts",
     "acceso": "tsx scripts/acceso.ts",
-    "db:renombrar": "tsx scripts/renombrar.ts"
+    "db:renombrar": "tsx scripts/renombrar.ts",
+    "costo": "tsx scripts/costo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

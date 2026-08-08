@@ -11,14 +11,23 @@ CREATE TABLE tenants (
   creado TIMESTAMPTZ DEFAULT now(),
   -- Operaciones con IA permitidas por día. Se ajusta por cliente con:
   --   UPDATE tenants SET limite_ia_diario = 100 WHERE id = 'brewwines';
-  limite_ia_diario INTEGER DEFAULT 50
+  limite_ia_diario INTEGER DEFAULT 50,
+  -- Tope opcional de tokens por día. NULL = sin tope de tokens.
+  tokens_dia_max BIGINT
 );
 
 -- Contador diario de uso de IA. Se reinicia solo al cambiar de fecha.
+-- Además de las operaciones, guarda los tokens reales que reportó la API,
+-- que es lo que permite calcular el costo verdadero por cliente.
 CREATE TABLE uso_ia (
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  fecha     DATE NOT NULL,
-  consultas INTEGER NOT NULL DEFAULT 0,
+  tenant_id           TEXT NOT NULL REFERENCES tenants(id),
+  fecha               DATE NOT NULL,
+  consultas           INTEGER NOT NULL DEFAULT 0,
+  llamadas            INTEGER DEFAULT 0,
+  tok_entrada         BIGINT DEFAULT 0,
+  tok_salida          BIGINT DEFAULT 0,
+  tok_cache_escritura BIGINT DEFAULT 0,
+  tok_cache_lectura   BIGINT DEFAULT 0,
   PRIMARY KEY (tenant_id, fecha)
 );
 
