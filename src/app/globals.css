@@ -64,7 +64,7 @@ body {
 
 /* ---------- Impresión / exportar a PDF ---------- */
 @media print {
-  @page { size: A4 portrait; margin: 12mm 10mm; }
+  @page { size: A4 portrait; margin: 11mm 9mm; }
 
   html, body {
     background: #fff !important;
@@ -76,8 +76,9 @@ body {
 
   .no-imprimir { display: none !important; }
 
-  /* El reporte ocupa el ancho de la hoja */
-  body > div > div { width: 100% !important; padding: 0 !important; }
+  /* El reporte conserva su ancho de pantalla: si se re-escala, las gráficas
+     recalculan y las etiquetas vuelven a encimarse. */
+  body > div > div { padding: 0 !important; }
 
   .salto-pagina { break-before: page; page-break-before: always; }
   .salto-pagina:first-of-type { break-before: auto; page-break-before: auto; }

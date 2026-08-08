@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS } from '@/lib/herramientas';
+import { consumir, COSTO } from '@/lib/limite';
 import {
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
   inventarioPorBodega, clientesDormidos, retencionMensual, resumenClientes,
@@ -112,6 +113,17 @@ export async function POST(req: Request) {
     mensajes: Anthropic.MessageParam[];
   };
 
+  // El cupo se reserva antes de llamar al modelo, no después.
+  const cupo = await consumir(COSTO.chat);
+  if (!cupo.permitido) {
+    return Response.json({
+      error: 'limite_alcanzado',
+      mensaje: `Llegaste al límite de ${cupo.limite} consultas de hoy. ` +
+               `El contador se reinicia a medianoche.`,
+      ...cupo,
+    }, { status: 429 });
+  }
+
   const ctx = await contexto();
   const codificador = new TextEncoder();
 
@@ -144,7 +156,7 @@ export async function POST(req: Request) {
           const final = await respuesta.finalMessage();
 
           if (final.stop_reason !== 'tool_use') {
-            enviar({ t: 'fin', trazas });
+            enviar({ t: 'fin', trazas, cupo });
             control.close();
             return;
           }

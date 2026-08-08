@@ -34,12 +34,12 @@ export function VistaVentas({ d }: { d: D }) {
         ]} alto={266} />
       </Tarjeta>
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid xl:grid-cols-2 gap-4">
         <Tarjeta id="productos" titulo="Top 5 productos" sub="unidades vendidas">
-          <Barras datos={rank(d.topProd ?? [], 'unidades')} tipo="entero" color={T.vino2} ancho={158} />
+          <Barras datos={rank(d.topProd ?? [], 'unidades')} tipo="entero" color={T.vino2} ancho={212} />
         </Tarjeta>
         <Tarjeta id="vendedores" titulo="Ingresos por vendedor" sub="periodo seleccionado">
-          <Barras datos={rank(d.porVend ?? [])} color={T.tierra} ancho={158} />
+          <Barras datos={rank(d.porVend ?? [])} color={T.tierra} ancho={182} />
         </Tarjeta>
       </div>
     </>
@@ -105,14 +105,13 @@ export function VistaProductos({ d }: { d: D }) {
         { etiqueta: 'SKUs con venta', valor: entero((d.todos ?? []).length), nota: 'productos distintos' },
       ]} />
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Tarjeta id="top10" titulo="Top 10 productos" sub="por ingreso">
-          <Barras datos={rank(d.top10 ?? [])} color={T.vino} ancho={168} />
-        </Tarjeta>
-        <Tarjeta id="peores" titulo="Peores 5 productos" sub="menor ingreso con venta">
-          <Barras datos={rank(d.peores ?? [])} color={T.rosa} ancho={168} alto={190} />
-        </Tarjeta>
-      </div>
+      <Tarjeta id="top10" titulo="Top 10 productos" sub="por ingreso">
+        <Barras datos={rank(d.top10 ?? [])} color={T.vino} ancho={286} />
+      </Tarjeta>
+
+      <Tarjeta id="peores" titulo="Peores 5 productos" sub="menor ingreso con venta">
+        <Barras datos={rank(d.peores ?? [])} color={T.rosa} ancho={286} />
+      </Tarjeta>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Tarjeta id="categoria" titulo="Ventas por línea" sub="participación">
@@ -152,16 +151,13 @@ export function VistaProductividad({ d }: { d: D }) {
         { etiqueta: 'Vendedores activos', valor: entero((d.porVend ?? []).length), nota: 'con venta registrada' },
       ]} />
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Tarjeta id="clientes" titulo="Top 10 clientes" sub="por ingreso">
-          <Barras datos={rank(d.topCli ?? [])} color={T.vino} ancho={172} />
-        </Tarjeta>
-        <Tarjeta id="vendedores" titulo="Ventas por vendedor" sub="clic para filtrar">
-          <div className="cursor-pointer" onClick={() => { /* drill-through desde la tabla */ }}>
-            <Barras datos={rank((d.porVend ?? []).slice(0, 10))} color={T.tierra} ancho={172} />
-          </div>
-        </Tarjeta>
-      </div>
+      <Tarjeta id="clientes" titulo="Top 10 clientes" sub="por ingreso">
+        <Barras datos={rank(d.topCli ?? [])} color={T.vino} ancho={286} />
+      </Tarjeta>
+
+      <Tarjeta id="vendedores" titulo="Ventas por vendedor" sub="top 10 del periodo">
+        <Barras datos={rank((d.porVend ?? []).slice(0, 10))} color={T.tierra} ancho={212} />
+      </Tarjeta>
 
       <Tarjeta id="matriz" titulo="Ingresos por vendedor y mes" sub="matriz con mapa de calor">
         <Matriz filas={Object.keys(d.celdas ?? {})} columnas={d.columnas ?? []} valores={d.celdas ?? {}} />
@@ -277,7 +273,7 @@ export function VistaOperativos({ d }: { d: D }) {
       <div className="grid lg:grid-cols-2 gap-4">
         <Tarjeta id="margencanal" titulo="Margen bruto por canal" sub="% sobre ingresos">
           <Barras datos={(d.margenCanal ?? []).map((x: D) => ({ etiqueta: String(x.etiqueta), valor: num(x.margen_pct) }))}
-            tipo="pct" color={T.vino2} ancho={120} />
+            tipo="pct" color={T.vino2} ancho={132} />
         </Tarjeta>
         <Tarjeta id="estadocobro" titulo="Estado de cobro" sub="cobrado vs pendiente">
           <Dona datos={[
@@ -306,19 +302,20 @@ export function VistaOperativos({ d }: { d: D }) {
       <div className="grid lg:grid-cols-2 gap-4">
         <Tarjeta id="deudores" titulo="Deudores con más de 90 días" sub="riesgo de incobrable">
           <Barras datos={(d.deudores ?? []).map((x: D) => ({ etiqueta: x.cliente, valor: x.saldo }))}
-            color={T.rojo} ancho={168} />
+            color={T.rojo} ancho={196} />
         </Tarjeta>
         <Tarjeta id="bodegas" titulo="Unidades disponibles por bodega" sub="inventario">
           <Barras datos={(d.bodegas ?? []).map((x: D) => ({ etiqueta: x.bodega, valor: x.unidades }))}
-            tipo="entero" color={T.tierra} ancho={130} />
+            tipo="entero" color={T.tierra} ancho={146} />
         </Tarjeta>
       </div>
 
+      <Tarjeta id="margenprod" titulo="Margen bruto por producto" sub="top 10 por ingreso">
+        <Barras datos={(d.margenProd ?? []).map((x: D) => ({ etiqueta: String(x.etiqueta), valor: num(x.margen_pct) }))}
+          tipo="pct" color={T.cobre} ancho={286} />
+      </Tarjeta>
+
       <div className="grid lg:grid-cols-2 gap-4">
-        <Tarjeta id="margenprod" titulo="Margen bruto por producto" sub="top 10 por ingreso">
-          <Barras datos={(d.margenProd ?? []).map((x: D) => ({ etiqueta: String(x.etiqueta), valor: num(x.margen_pct) }))}
-            tipo="pct" color={T.cobre} ancho={168} />
-        </Tarjeta>
         <Tarjeta id="muertos" titulo="Inventario sin movimiento" sub={`${inv.sin_movimiento ?? 0} SKUs · ${mxn(num(inv.valor_muerto))}`}>
           <Tabla columnas={[
             { key: 'producto', titulo: 'Producto' },

@@ -1,84 +1,35 @@
-# Actualización — corrección de "Marketing" + exportación a PDF
+# Ajuste — límite diario de consultas con IA
 
-Dos cambios en un solo paquete.
+## Cómo funciona
 
----
+Un contador por cliente y por día. El chat cuesta **1 operación**, generar el
+reporte con resumen escrito cuesta **3** (manda mucho más contexto al modelo).
 
-## 1. Corrección de las métricas derivadas de "Marketing"
+El contador vive en la base de datos, no en memoria: en Vercel cada petición
+corre en un proceso distinto, así que un contador en RAM no serviría.
 
-El cliente confirmó que esa tabla **no es gasto publicitario**: agrupa ventas
-menores a $190 según un criterio de clasificación propio. Eso invalidaba dos
-medidas del Power BI original:
+El reinicio ocurre a **medianoche hora de Ciudad de México**, no UTC.
 
-```dax
-Margen Neto   = Margen Bruto - Gasto Marketing
-ROI Marketing = Ingresos / Gasto Marketing
+### Qué ve el usuario
+
+- Normal: el pie del chat dice lo de siempre
+- Quedan 10 o menos: *"Te quedan 7 de 50 consultas hoy"* en ámbar
+- Sin cupo: el campo se bloquea y aparece el aviso en rojo
+
+El tablero completo sigue funcionando sin cupo. Solo se apaga el chat y el
+resumen escrito del PDF — **el reporte se genera igual**, nada más sin el
+párrafo de análisis.
+
+## Ajustar el límite
+
+```cmd
+npm run limite            :: ver uso actual e histórico de 7 días
+npm run limite 80         :: subir a 80 por día
+npm run limite 80 cliente2 :: para otro cliente
 ```
 
-### Qué cambió
-
-| Antes | Ahora |
-|---|---|
-| Tabla `marketing` | Tabla `ventas_reclasificadas` |
-| Columna `campana` | Columna `concepto` |
-| KPI "Margen Neto" | **Margen bruto** (sin restas falsas) |
-| KPI "ROI Marketing" | **Tendencia mensual** |
-| Tarjeta "Gasto de marketing" | **Ventas reclasificadas**, con advertencia |
-
-El dato sigue visible como referencia, pero ya no alimenta ningún cálculo.
-
-**Sobre la métrica de reemplazo:** "Tendencia mensual" sale de la pendiente de la
-regresión del forecast. Dice en pesos cuánto crece o cae la venta cada mes. Es
-accionable y verificable, a diferencia del ROI anterior.
-
-El asistente también lo sabe: si preguntan por ROI de marketing o gasto en
-publicidad, explica que ese dato no existe en vez de inventar un número.
-
----
-
-## 2. Exportación a PDF
-
-Nueva ruta **`/reporte`** con el reporte ejecutivo completo: 7 secciones, todas
-las gráficas, y un **resumen escrito por la IA** a partir de las cifras reales.
-
-### Cómo se usa
-
-- Botón **"exportar pdf"** en el encabezado del tablero
-- O pedírselo al asistente: *"genera el reporte para la junta"*
-
-En la página, el botón **Descargar PDF** abre el diálogo de impresión del
-navegador. Ahí eliges "Guardar como PDF".
-
-### El resumen ejecutivo
-
-Un endpoint (`/api/resumen`) junta las cifras de las 7 secciones y le pide al
-modelo un resumen con cuatro apartados fijos:
-
-- **Situación** — estado general del periodo
-- **Lo que va bien** — tres puntos con cifra
-- **Lo que requiere atención** — tres puntos con cifra y por qué importa
-- **Qué hacer** — tres acciones concretas, en orden de urgencia
-
-Todas las cifras vienen de consultas reales. El modelo redacta, no calcula.
-Si el resumen falla, el resto del reporte se genera igual.
-
-**Esto es lo que Power BI no puede hacer.** Un PDF con gráficas lo exporta
-cualquiera; un PDF que además explica qué está pasando y qué hacer, no.
-
-### Detalles de implementación
-
-Se usa el motor de impresión del navegador en vez de una librería de PDF:
-sin dependencias nuevas, sin costo de servidor, y funciona en el plan Hobby de
-Vercel. Las gráficas son SVG, así que salen nítidas a cualquier resolución.
-
-El CSS de impresión controla saltos de página por sección, evita cortar tablas
-y gráficas a la mitad, y fuerza los colores del tema (por defecto los navegadores
-los quitan al imprimir).
-
-Los filtros activos se heredan: si estás viendo solo Cancún, el reporte sale
-filtrado a Cancún y lo dice en la portada.
-
----
+No requiere redesplegar. El límite vive en la tabla `tenants`, así que cada
+cliente puede tener el suyo.
 
 ## Pasos para actualizar
 
@@ -87,35 +38,14 @@ npm install
 npm run db:migrar
 npm run build
 git add .
-git commit -m "Corrige metricas de Marketing y agrega exportacion a PDF"
+git commit -m "Limite diario de consultas IA"
 git push
 ```
 
-`db:migrar` renombra la tabla **sin borrar datos**. No hace falta recargar los Excel.
+`db:migrar` agrega la columna y la tabla sin borrar datos.
 
-> Si prefieres empezar de cero: `npm run db:schema`, `npm run db:cargar`
-> y `npm run db:reclasificadas` (antes `db:marketing`).
+## Nota sobre concurrencia
 
-### Para probar
-
-1. Abre el tablero y dale a **exportar pdf**
-2. Espera unos segundos a que aparezca el resumen ejecutivo
-3. **Descargar PDF** → guardar
-4. Prueba también con filtros puestos, por ejemplo solo Cancún
-5. Pídeselo al chat: *"genera el reporte para la junta"*
-
-> `/api/resumen` tiene `maxDuration = 30`. En plan Hobby el tope es 10 segundos:
-> **bájalo a 10** en ese archivo antes de publicar, o el resumen se cortará. El
-> resto del reporte funciona igual aunque el resumen falle.
-
----
-
-## Pendiente con el cliente
-
-Vale la pena preguntar **por qué** pidieron esa clasificación. Si resulta ser
-muestras o degustaciones, la métrica correcta sería *costo de muestreo comercial*,
-y eso sí conviene medirlo bien con su propia tarjeta.
-
-También revisar julio: **$359,758** contra un promedio previo mucho menor, y con
-solo 17 días de datos. Coincide con la factura anómala de $2.2M vendida casi al
-costo — probablemente el mismo evento contado dos veces.
+La reserva de cupo usa un `INSERT ... ON CONFLICT DO UPDATE ... WHERE` en una
+sola sentencia. Si dos peticiones llegan al mismo tiempo con una sola operación
+disponible, solo una pasa. Con un contador leído y luego escrito, ambas pasarían.

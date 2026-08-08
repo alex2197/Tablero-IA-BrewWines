@@ -115,6 +115,7 @@ function Contenido() {
       .then(r => r.json())
       .then(j => (j.error ? setErrorIA(j.error) : setResumen(j.texto)))
       .catch(e => setErrorIA(e.message));
+    // El resto del reporte no depende de esto: si falla, solo falta el resumen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -173,7 +174,9 @@ function Contenido() {
           {resumen ? <Resumen texto={resumen} />
             : errorIA ? (
               <p className="text-[12.5px]" style={{ color: T.humo }}>
-                No pude generar el resumen automático ({errorIA}). El resto del reporte está completo.
+                {errorIA.includes('límite')
+                  ? errorIA
+                  : `No pude generar el resumen automático (${errorIA}). El resto del reporte está completo.`}
               </p>
             ) : (
               <p className="text-[12.5px]" style={{ color: T.humo }}>Redactando resumen…</p>
@@ -199,42 +202,37 @@ function Contenido() {
             { key: 'margen_bruto', nombre: 'Utilidad', color: T.arena },
           ]} />
         </Bloque>
-        <div className="grid grid-cols-2 gap-4">
-          <Bloque titulo="Top 5 productos por unidades">
-            <Barras datos={rank(d.ventas?.topProd, 'unidades')} tipo="entero" color={T.vino2} ancho={118} alto={150} />
-          </Bloque>
-          <Bloque titulo="Ingresos por vendedor">
-            <Barras datos={rank(d.ventas?.porVend).slice(0, 5)} color={T.tierra} ancho={118} alto={150} />
-          </Bloque>
-        </div>
+        <Bloque titulo="Top 5 productos por unidades">
+          <Barras datos={rank(d.ventas?.topProd, 'unidades')} tipo="entero" color={T.vino2} ancho={272} />
+        </Bloque>
+        <Bloque titulo="Ingresos por vendedor">
+          <Barras datos={rank(d.ventas?.porVend).slice(0, 6)} color={T.tierra} ancho={218} />
+        </Bloque>
       </Seccion>
 
       {/* 2. Canales */}
       <Seccion titulo="2 · Canales" salto>
-        <div className="grid grid-cols-2 gap-4">
-          <Bloque titulo="Participación por canal">
-            <Dona datos={rank(d.canales?.porCanal)} alto={185} />
-          </Bloque>
-          <Bloque titulo="Detalle por canal">
-            <Tabla columnas={[
-              { key: 'etiqueta', titulo: 'Canal' },
-              { key: 'venta_neta', titulo: 'Ingresos', tipo: 'moneda' },
-              { key: 'margen_pct', titulo: 'Margen', tipo: 'pct' },
-            ]} filas={d.canales?.porCanal ?? []} />
-          </Bloque>
-        </div>
+        <Bloque titulo="Participación por canal">
+          <Dona datos={rank(d.canales?.porCanal)} alto={200} />
+        </Bloque>
+        <Bloque titulo="Detalle por canal">
+          <Tabla columnas={[
+            { key: 'etiqueta', titulo: 'Canal' },
+            { key: 'venta_neta', titulo: 'Ingresos', tipo: 'moneda' },
+            { key: 'margen_pct', titulo: 'Margen', tipo: 'pct' },
+            { key: 'facturas', titulo: 'Facturas', tipo: 'entero' },
+          ]} filas={d.canales?.porCanal ?? []} />
+        </Bloque>
       </Seccion>
 
       {/* 3. Productos */}
       <Seccion titulo="3 · Productos">
-        <div className="grid grid-cols-2 gap-4">
-          <Bloque titulo="Top 10 por ingreso">
-            <Barras datos={rank(d.productos?.top10)} color={T.vino} ancho={126} alto={250} />
-          </Bloque>
-          <Bloque titulo="Menor ingreso con venta">
-            <Barras datos={rank(d.productos?.peores)} color={T.rosa} ancho={126} alto={150} />
-          </Bloque>
-        </div>
+        <Bloque titulo="Top 10 por ingreso">
+          <Barras datos={rank(d.productos?.top10)} color={T.vino} ancho={286} />
+        </Bloque>
+        <Bloque titulo="Menor ingreso con venta">
+          <Barras datos={rank(d.productos?.peores)} color={T.rosa} ancho={286} />
+        </Bloque>
       </Seccion>
 
       {/* 4. Productividad */}
@@ -245,18 +243,16 @@ function Contenido() {
           { e: 'Ticket promedio', v: mxn(n(k.ticket_promedio)), n: 'por factura' },
           { e: 'Vendedores', v: entero((d.productividad?.porVend ?? []).length), n: 'con venta' },
         ]} />
-        <div className="grid grid-cols-2 gap-4">
-          <Bloque titulo="Top 10 clientes">
-            <Barras datos={rank(d.productividad?.topCli)} color={T.vino} ancho={126} alto={250} />
-          </Bloque>
-          <Bloque titulo="Desempeño por vendedor">
-            <Tabla columnas={[
-              { key: 'etiqueta', titulo: 'Vendedor' },
-              { key: 'venta_neta', titulo: 'Ingresos', tipo: 'moneda' },
-              { key: 'margen_pct', titulo: 'Margen', tipo: 'pct' },
-            ]} filas={(d.productividad?.porVend ?? []).slice(0, 10)} />
-          </Bloque>
-        </div>
+        <Bloque titulo="Top 10 clientes por ingreso">
+          <Barras datos={rank(d.productividad?.topCli)} color={T.vino} ancho={286} />
+        </Bloque>
+        <Bloque titulo="Desempeño por vendedor">
+          <Tabla columnas={[
+            { key: 'etiqueta', titulo: 'Vendedor' },
+            { key: 'venta_neta', titulo: 'Ingresos', tipo: 'moneda' },
+            { key: 'margen_pct', titulo: 'Margen', tipo: 'pct' },
+          ]} filas={(d.productividad?.porVend ?? []).slice(0, 12)} />
+        </Bloque>
       </Seccion>
 
       {/* 5. Retención */}

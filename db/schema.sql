@@ -8,7 +8,18 @@ CREATE TABLE tenants (
   id     TEXT PRIMARY KEY,
   nombre TEXT NOT NULL,
   giro   TEXT,
-  creado TIMESTAMPTZ DEFAULT now()
+  creado TIMESTAMPTZ DEFAULT now(),
+  -- Operaciones con IA permitidas por día. Se ajusta por cliente con:
+  --   UPDATE tenants SET limite_ia_diario = 100 WHERE id = 'teravino';
+  limite_ia_diario INTEGER DEFAULT 50
+);
+
+-- Contador diario de uso de IA. Se reinicia solo al cambiar de fecha.
+CREATE TABLE uso_ia (
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  fecha     DATE NOT NULL,
+  consultas INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, fecha)
 );
 
 CREATE TABLE vendedores (

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { consumir, COSTO } from '@/lib/limite';
 import {
   consultar, metricasCxC, resumenInventario, resumenClientes,
   retencionMensual, forecast, alertas, contexto, cartera, type Filtros,
@@ -18,6 +19,15 @@ export async function POST(req: Request) {
   const f = (await req.json().catch(() => ({}))) as Filtros;
 
   try {
+    const cupo = await consumir(COSTO.reporte);
+    if (!cupo.permitido) {
+      return Response.json({
+        error: `Llegaste al límite de ${cupo.limite} operaciones de IA de hoy. ` +
+               `El reporte se genera igual, solo sin el resumen escrito.`,
+        limite_alcanzado: true, ...cupo,
+      }, { status: 429 });
+    }
+
     const ctx = await contexto();
     const M = ['venta_neta', 'costo_total', 'margen_bruto', 'margen_pct',
       'unidades', 'facturas', 'clientes_activos', 'ticket_promedio'];

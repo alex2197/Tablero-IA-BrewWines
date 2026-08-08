@@ -44,24 +44,60 @@ export function Columnas({
 }
 
 /* ---------- Barras horizontales (barChart) ---------- */
+
+/**
+ * Etiqueta de categoría en una sola línea.
+ * Recharts, si el texto no cabe, lo parte en varias líneas y las filas se
+ * enciman. Aquí se trunca a lo que cabe y el nombre completo queda en el
+ * tooltip nativo del SVG.
+ */
+function TickCategoria(props: {
+  x?: number; y?: number; ancho?: number;
+  payload?: { value?: string | number };
+}) {
+  const { x = 0, y = 0, ancho = 170, payload } = props;
+  const texto = String(payload?.value ?? '');
+  // ~5.85 px por carácter a 11px en la fuente de interfaz
+  const maxChars = Math.max(6, Math.floor((ancho - 10) / 5.85));
+  const corto = texto.length > maxChars
+    ? texto.slice(0, maxChars - 1).trimEnd() + '…'
+    : texto;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{texto}</title>
+      <text x={-8} y={0} dy={3.5} textAnchor="end"
+        fontSize={11} fontFamily="var(--font-sans)" fill={T.vino}>
+        {corto}
+      </text>
+    </g>
+  );
+}
+
 export function Barras({
-  datos, campo = 'valor', alto, tipo = 'moneda', color = T.vino, ancho = 150,
+  datos, campo = 'valor', alto, tipo = 'moneda', color = T.vino, ancho = 190,
 }: {
   datos: { etiqueta: string; valor: number; extra?: string }[];
   campo?: string; alto?: number; tipo?: 'moneda' | 'entero' | 'pct'; color?: string; ancho?: number;
 }) {
   if (!datos.length) return <Vacio />;
-  const h = alto ?? Math.max(160, datos.length * 26 + 20);
+  // 32 px por fila deja aire suficiente entre etiquetas
+  const h = alto ?? Math.max(170, datos.length * 32 + 34);
   return (
     <ResponsiveContainer width="100%" height={h}>
-      <BarChart data={datos} layout="vertical" margin={{ top: 4, right: 44, left: 4, bottom: 4 }}>
+      <BarChart data={datos} layout="vertical"
+        margin={{ top: 4, right: 52, left: 4, bottom: 4 }}
+        barCategoryGap="28%">
         <CartesianGrid stroke={T.linea} horizontal={false} />
-        <XAxis type="number" tickFormatter={v => (tipo === 'moneda' ? compacto(v) : String(v))}
+        <XAxis type="number"
+          tickFormatter={v => (tipo === 'moneda' ? compacto(v) : String(v))}
           tickLine={false} axisLine={false} tick={ejeTick} />
-        <YAxis type="category" dataKey="etiqueta" width={ancho} tickLine={false} axisLine={false}
-          tick={{ ...ejeTick, fontFamily: 'var(--font-sans)', fontSize: 11 }} />
-        <Tooltip contentStyle={tooltipEstilo} formatter={(v: number) => [fmtValor(v, tipo), '']} />
-        <Bar dataKey={campo} fill={color} radius={[0, 2, 2, 0]} maxBarSize={16} />
+        <YAxis type="category" dataKey="etiqueta" width={ancho} interval={0}
+          tickLine={false} axisLine={false}
+          tick={<TickCategoria ancho={ancho} />} />
+        <Tooltip contentStyle={tooltipEstilo}
+          formatter={(v: number) => [fmtValor(v, tipo), '']}
+          labelFormatter={(l: string) => l} />
+        <Bar dataKey={campo} fill={color} radius={[0, 2, 2, 0]} maxBarSize={15} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -131,7 +167,7 @@ export function Dona({
         {datos.map((d, i) => (
           <li key={d.etiqueta} className="flex items-center gap-2 text-[12px]">
             <span className="w-2.5 h-2.5 shrink-0" style={{ background: SERIE[i % SERIE.length] }} />
-            <span className="truncate flex-1">{d.etiqueta}</span>
+            <span className="truncate flex-1" title={d.etiqueta}>{d.etiqueta}</span>
             <span className="font-mono text-[11px] num">{((d.valor / total) * 100).toFixed(1)}%</span>
           </li>
         ))}

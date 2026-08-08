@@ -35,6 +35,14 @@ export default function Chat() {
   const [entrada, setEntrada] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [herramienta, setHerramienta] = useState<string | null>(null);
+  const [cupo, setCupo] = useState<{ restantes: number; limite: number } | null>(null);
+  const [sinCupo, setSinCupo] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/cupo').then(r => r.json())
+      .then(j => { if (!j.error) { setCupo(j); setSinCupo(j.restantes <= 0); } })
+      .catch(() => {});
+  }, []);
 
   const finRef = useRef<HTMLDivElement>(null);
   useEffect(() => { finRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensajes, herramienta]);
@@ -56,6 +64,17 @@ export default function Chat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensajes: historial }),
       });
+      if (res.status === 429) {
+        const j = await res.json();
+        setSinCupo(true);
+        setCupo({ restantes: 0, limite: j.limite ?? 0 });
+        setMensajes(m => {
+          const c = [...m];
+          c[c.length - 1] = { rol: 'assistant', texto: j.mensaje ?? 'Límite diario alcanzado.' };
+          return c;
+        });
+        return;
+      }
       if (!res.body) throw new Error('Sin respuesta del servidor');
 
       const lector = res.body.getReader();
@@ -93,6 +112,10 @@ export default function Chat() {
             // El reporte se abre en otra pestaña para no perder la conversación
             window.open(evt.url as string, '_blank', 'noopener');
           } else if (evt.t === 'fin') {
+            if (evt.cupo) {
+              setCupo(evt.cupo);
+              setSinCupo(evt.cupo.restantes <= 0);
+            }
             setMensajes((m) => {
               const c = [...m];
               c[c.length - 1] = { rol: 'assistant', texto: acumulado, trazas: evt.trazas };
@@ -169,7 +192,7 @@ export default function Chat() {
         <div ref={finRef} />
       </div>
 
-      {!ocupado && mensajes.length <= 3 && (
+      {!ocupado && !sinCupo && mensajes.length <= 3 && (
         <div className="px-5 pb-3 flex gap-1.5 flex-wrap">
           {SUGERENCIAS.map((s) => (
             <button key={s} onClick={() => enviar(s)}
@@ -181,17 +204,21 @@ export default function Chat() {
 
       <div className="border-t border-linea px-3.5 py-3 flex gap-2 items-end">
         <textarea
-          rows={1} value={entrada} disabled={ocupado}
+          rows={1} value={entrada} disabled={ocupado || sinCupo}
           onChange={(e) => setEntrada(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(entrada); }
           }}
-          placeholder={ocupado ? 'Consultando…' : 'Escribe tu pregunta…'}
+          placeholder={
+            sinCupo ? 'Límite diario alcanzado'
+            : ocupado ? 'Consultando…'
+            : 'Escribe tu pregunta…'
+          }
           aria-label="Pregunta"
           className="flex-1 resize-none border border-linea2 rounded-lg px-2.5 py-2 text-[13.5px] max-h-24 focus:outline-none focus:border-jade disabled:bg-papel"
         />
         <button
-          onClick={() => enviar(entrada)} disabled={ocupado || !entrada.trim()}
+          onClick={() => enviar(entrada)} disabled={ocupado || sinCupo || !entrada.trim()}
           aria-label="Enviar"
           className="bg-tinta text-white w-[33px] h-[33px] rounded-lg grid place-items-center shrink-0 hover:bg-jade disabled:opacity-40 transition-colors"
         >
@@ -202,8 +229,13 @@ export default function Chat() {
         </button>
       </div>
 
-      <p className="font-mono text-[10px] text-humo text-center px-5 pb-3 leading-relaxed">
-        Las cifras salen de consultas reales a la base de datos
+      <p className="font-mono text-[10px] text-center px-5 pb-3 leading-relaxed"
+        style={{ color: sinCupo ? 'var(--color-rojo)' : cupo && cupo.restantes <= 5 ? 'var(--color-ambar)' : 'var(--color-humo)' }}>
+        {sinCupo
+          ? `Límite de ${cupo?.limite ?? ''} consultas diarias alcanzado · se reinicia a medianoche`
+          : cupo && cupo.restantes <= 10
+            ? `Te quedan ${cupo.restantes} de ${cupo.limite} consultas hoy`
+            : 'Las cifras salen de consultas reales a la base de datos'}
       </p>
     </aside>
   );
