@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS } from '@/lib/herramientas';
 import { consumir, COSTO } from '@/lib/limite';
+import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
   inventarioPorBodega, clientesDormidos, retencionMensual, resumenClientes,
@@ -112,6 +113,9 @@ export async function POST(req: Request) {
   const { mensajes } = (await req.json()) as {
     mensajes: Anthropic.MessageParam[];
   };
+
+  const acceso = await verificarAcceso();
+  if (!acceso.permitido) return respuestaSinAcceso(acceso);
 
   // El cupo se reserva antes de llamar al modelo, no después.
   const cupo = await consumir(COSTO.chat);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { COOKIE, firmar, MAX_EDAD } from '@/lib/sesion';
+import { verificarAcceso } from '@/lib/acceso';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,15 @@ export async function POST(req: NextRequest) {
 
   if (!iguales(String(password ?? ''), esperada)) {
     return NextResponse.json({ error: 'Contraseña incorrecta' }, { status: 401 });
+  }
+
+  // La contraseña es correcta, pero el acceso puede estar vencido o suspendido.
+  const acceso = await verificarAcceso();
+  if (!acceso.permitido) {
+    return NextResponse.json({
+      error: acceso.mensaje ?? 'Acceso no disponible',
+      estado: acceso.estado, contacto: acceso.contacto, sinAcceso: true,
+    }, { status: 403 });
   }
 
   const res = NextResponse.json({ ok: true });

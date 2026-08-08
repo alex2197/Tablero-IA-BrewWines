@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, cartera, carteraAntiguedad, metricasCxC,
   inventarioSinMovimiento, inventarioPorBodega, resumenInventario,
@@ -22,6 +23,9 @@ export async function GET(req: NextRequest) {
   };
 
   try {
+    const acceso = await verificarAcceso();
+    if (!acceso.permitido) return respuestaSinAcceso(acceso);
+
     const ctx = await contexto();
     const M = ['venta_neta','costo_total','margen_bruto','margen_pct','unidades',
                'facturas','clientes_activos','ticket_promedio','precio_promedio','ingreso_por_cliente'];

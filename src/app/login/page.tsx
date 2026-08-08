@@ -8,6 +8,7 @@ function Formulario() {
   const destino = useSearchParams().get('destino') ?? '/';
   const [pass, setPass] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [sinAcceso, setSinAcceso] = useState<{ mensaje: string; contacto: string | null } | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   async function entrar(e: React.FormEvent) {
@@ -20,6 +21,10 @@ function Formulario() {
         body: JSON.stringify({ password: pass }),
       });
       const j = await r.json();
+      if (j.sinAcceso) {
+        setSinAcceso({ mensaje: j.error, contacto: j.contacto ?? null });
+        return;
+      }
       if (!r.ok) { setError(j.error ?? 'No pude iniciar sesión'); return; }
       router.push(destino);
       router.refresh();
@@ -28,6 +33,36 @@ function Formulario() {
     } finally {
       setOcupado(false);
     }
+  }
+
+  if (sinAcceso) {
+    return (
+      <div className="w-full max-w-[380px]">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight">
+          {process.env.NEXT_PUBLIC_EMPRESA ?? 'Tablero'}
+        </h1>
+        <p className="etiqueta mt-1 mb-6">Tablero de negocio</p>
+
+        <div className="border px-4 py-4"
+          style={{ borderColor: T.linea2, borderLeft: `3px solid ${T.ambar}`, background: '#fff' }}>
+          <p className="text-[14px] font-medium">{sinAcceso.mensaje}</p>
+          <p className="text-[13px] mt-2" style={{ color: T.humo }}>
+            Tus datos siguen guardados. En cuanto se reactive el acceso, el tablero
+            vuelve exactamente como lo dejaste.
+          </p>
+          {sinAcceso.contacto && (
+            <p className="text-[13px] mt-3 pt-3 border-t" style={{ borderColor: T.linea }}>
+              Para reactivarlo: <strong>{sinAcceso.contacto}</strong>
+            </p>
+          )}
+        </div>
+
+        <button onClick={() => { setSinAcceso(null); setPass(''); }}
+          className="etiqueta mt-4 hover:underline">
+          volver
+        </button>
+      </div>
+    );
   }
 
   return (

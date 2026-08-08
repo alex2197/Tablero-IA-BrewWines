@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { pool, TENANT } from '@/lib/db';
 import { analizar, escribir, type ArchivoEntrada } from '@/lib/etl';
+import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -12,6 +13,9 @@ export const maxDuration = 10;
  */
 export async function POST(req: NextRequest) {
   try {
+    const acceso = await verificarAcceso();
+    if (!acceso.permitido) return respuestaSinAcceso(acceso);
+
     const form = await req.formData();
     const modo = String(form.get('modo') ?? 'validar');
     const empresa = String(form.get('empresa') ?? process.env.NEXT_PUBLIC_EMPRESA ?? 'Empresa');

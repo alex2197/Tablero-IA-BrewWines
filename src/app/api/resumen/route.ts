@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { consumir, COSTO } from '@/lib/limite';
+import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, metricasCxC, resumenInventario, resumenClientes,
   retencionMensual, forecast, alertas, contexto, cartera, type Filtros,
@@ -19,6 +20,9 @@ export async function POST(req: Request) {
   const f = (await req.json().catch(() => ({}))) as Filtros;
 
   try {
+    const acceso = await verificarAcceso();
+    if (!acceso.permitido) return respuestaSinAcceso(acceso);
+
     const cupo = await consumir(COSTO.reporte);
     if (!cupo.permitido) {
       return Response.json({

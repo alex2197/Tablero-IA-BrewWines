@@ -22,6 +22,16 @@ export default function Tablero() {
   const [ctx, setCtx] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [acceso, setAcceso] = useState<{
+    permitido: boolean; estado: string; diasRestantes: number | null;
+    mensaje: string | null; contacto: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/acceso').then(r => r.json())
+      .then(j => { if (!j.error) setAcceso(j); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (vista === 'alertas') { setCargando(false); return; }
@@ -49,9 +59,51 @@ export default function Tablero() {
 
   const empresa = process.env.NEXT_PUBLIC_EMPRESA ?? ctx?.empresa ?? 'Tablero';
 
+  // Si la prueba venció con la sesión abierta, se corta aquí.
+  if (acceso && !acceso.permitido) {
+    return (
+      <div className="min-h-screen grid place-items-center px-6">
+        <div className="w-full max-w-[400px]">
+          <h1 className="font-display text-2xl font-extrabold tracking-tight">{empresa}</h1>
+          <p className="etiqueta mt-1 mb-6">Tablero de negocio</p>
+          <div className="border px-4 py-4"
+            style={{ borderColor: T.linea2, borderLeft: `3px solid ${T.ambar}`, background: '#fff' }}>
+            <p className="text-[14px] font-medium">{acceso.mensaje}</p>
+            <p className="text-[13px] mt-2" style={{ color: T.humo }}>
+              Tus datos siguen guardados. En cuanto se reactive el acceso, el tablero
+              vuelve exactamente como lo dejaste.
+            </p>
+            {acceso.contacto && (
+              <p className="text-[13px] mt-3 pt-3 border-t" style={{ borderColor: T.linea }}>
+                Para reactivarlo: <strong>{acceso.contacto}</strong>
+              </p>
+            )}
+          </div>
+          <button onClick={async () => {
+            await fetch('/api/login', { method: 'DELETE' });
+            location.href = '/login';
+          }} className="etiqueta mt-4 hover:underline">cerrar sesión</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] h-screen max-lg:h-auto">
       <main className="overflow-y-auto scroll-suave px-4 md:px-6 pb-10">
+
+        {acceso?.estado === 'prueba' && acceso.diasRestantes !== null && (
+          <div className="mt-3 px-3 py-2 font-mono text-[10.5px] border"
+            style={{
+              borderColor: acceso.diasRestantes <= 3 ? T.ambar : T.linea2,
+              background: acceso.diasRestantes <= 3 ? '#f7ecdc' : '#fff',
+              color: acceso.diasRestantes <= 3 ? '#9A5600' : T.humo,
+            }}>
+            PERIODO DE PRUEBA · {acceso.diasRestantes === 0
+              ? 'último día'
+              : `quedan ${acceso.diasRestantes} día${acceso.diasRestantes === 1 ? '' : 's'}`}
+          </div>
+        )}
 
         <header className="sticky top-0 z-30 pt-5 border-b mb-5"
           style={{ background: T.papel, borderColor: T.linea }}>
