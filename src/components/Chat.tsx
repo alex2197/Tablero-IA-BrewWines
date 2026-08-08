@@ -46,9 +46,8 @@ export default function Chat() {
   const [ocupado, setOcupado] = useState(false);
   const [herramienta, setHerramienta] = useState<string | null>(null);
   const [cupo, setCupo] = useState<{
-    restantes: number; limite: number; usadas: number; pct: number;
-    tokensHoy?: number; tokensMax?: number | null;
-    motivo?: 'consultas' | 'tokens';
+    disponibles: number; totalEquivalente: number; pct: number;
+    limite: number; usadas: number; restantes: number;
   } | null>(null);
   const [sinCupo, setSinCupo] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -56,7 +55,7 @@ export default function Chat() {
   /** Relee el cupo del servidor. Se usa al cargar y después de cancelar. */
   const refrescarCupo = () =>
     fetch('/api/cupo').then(r => r.json())
-      .then(j => { if (!j.error) { setCupo(j); setSinCupo(j.restantes <= 0 || j.pct >= 100); } })
+      .then(j => { if (!j.error) { setCupo(j); setSinCupo(j.disponibles <= 0); } })
       .catch(() => {});
 
   /** Corta la petición en curso. El servidor registra solo lo que alcanzó a gastar. */
@@ -94,7 +93,10 @@ export default function Chat() {
       if (res.status === 429) {
         const j = await res.json();
         setSinCupo(true);
-        setCupo({ restantes: 0, limite: j.limite ?? 0, usadas: j.usadas ?? 0, pct: 100 });
+        setCupo({
+          disponibles: 0, totalEquivalente: j.totalEquivalente ?? j.limite ?? 0,
+          pct: 100, limite: j.limite ?? 0, usadas: j.usadas ?? 0, restantes: 0,
+        });
         setMensajes(m => {
           const c = [...m];
           c[c.length - 1] = { rol: 'assistant', texto: j.mensaje ?? 'Límite diario alcanzado.' };
@@ -141,7 +143,7 @@ export default function Chat() {
           } else if (evt.t === 'fin') {
             if (evt.cupo) {
               setCupo(evt.cupo);
-              setSinCupo(evt.cupo.restantes <= 0);
+              setSinCupo(evt.cupo.disponibles <= 0);
             }
             setMensajes((m) => {
               const c = [...m];
@@ -293,39 +295,32 @@ export default function Chat() {
         <div className="px-5 pb-3">
           <div className="flex justify-between items-baseline mb-1.5">
             <span className="font-mono text-[9.5px] uppercase tracking-widest"
-              style={{ color: 'var(--color-humo)' }}>
-              Consumo de hoy
+              style={{ color: sinCupo ? 'var(--color-rojo)' : 'var(--color-humo)' }}>
+              {sinCupo
+                ? 'Sin consultas disponibles'
+                : `Te ${cupo.disponibles === 1 ? 'queda' : 'quedan'} ${cupo.disponibles} ${cupo.disponibles === 1 ? 'consulta' : 'consultas'}`}
             </span>
-            <span className="font-mono text-[10px] num"
-              style={{ color: colorConsumo(sinCupo, cupo.pct) }}>
-              {sinCupo ? 'agotado' : `${cupo.pct}%`}
+            <span className="font-mono text-[10px] num" style={{ color: 'var(--color-humo)' }}>
+              {sinCupo ? '' : `de ${cupo.totalEquivalente}`}
             </span>
           </div>
 
           <div className="h-1.5 w-full" style={{ background: 'var(--color-linea)' }}>
             <div className="h-1.5 transition-[width] duration-500"
               style={{
-                // Un mínimo de 2% para que se note que ya hubo consumo
-                width: `${cupo.pct > 0 ? Math.max(2, Math.min(100, cupo.pct)) : 0}%`,
+                width: `${Math.min(100, cupo.pct)}%`,
                 background: colorConsumo(sinCupo, cupo.pct),
               }} />
           </div>
 
           <p className="font-mono text-[9.5px] mt-1.5 leading-relaxed"
-            style={{ color: sinCupo ? 'var(--color-rojo)' : 'var(--color-humo)' }}>
+            style={{ color: 'var(--color-humo)' }}>
             {sinCupo
-              ? (cupo.motivo === 'tokens'
-                  ? 'Consumo diario agotado · se reinicia a medianoche'
-                  : `Límite de ${cupo.limite} consultas alcanzado · se reinicia a medianoche`)
-              : `${cupo.usadas} de ${cupo.limite} consultas`}
+              ? 'Alcanzaste tu límite de hoy · se reinicia a medianoche'
+              : 'Se reinicia a medianoche'}
           </p>
         </div>
       )}
-
-      <p className="font-mono text-[10px] text-center px-5 pb-3 leading-relaxed"
-        style={{ color: 'var(--color-humo)' }}>
-        Las cifras salen de consultas reales a la base de datos
-      </p>
     </aside>
   );
 }

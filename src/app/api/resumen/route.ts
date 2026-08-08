@@ -26,8 +26,8 @@ export async function POST(req: Request) {
     const cupo = await consumir(COSTO.reporte);
     if (!cupo.permitido) {
       return Response.json({
-        error: `Llegaste al límite de ${cupo.limite} operaciones de IA de hoy. ` +
-               `El reporte se genera igual, solo sin el resumen escrito.`,
+        error: 'Alcanzaste tu límite de consultas de hoy. ' +
+               'El reporte se genera igual, solo sin el resumen escrito.',
         limite_alcanzado: true, ...cupo,
       }, { status: 429 });
     }

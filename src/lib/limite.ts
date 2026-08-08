@@ -20,6 +20,14 @@ export interface EstadoLimite {
   tokensMax?: number | null;
   /** Porcentaje consumido del día: el mayor de los dos topes. 0 a 100. */
   pct: number;
+  /**
+   * Consultas que le quedan al usuario, ya considerando ambos topes.
+   * Es la única cifra que se le muestra: si el presupuesto de tokens alcanza
+   * para menos consultas de las que restan por conteo, manda el presupuesto.
+   */
+  disponibles: number;
+  /** Consultas equivalentes que caben en el presupuesto del día. */
+  totalEquivalente: number;
 }
 
 /** Tokens reportados por la API en cada respuesta. */
@@ -66,6 +74,24 @@ async function topesDe(tenant: string): Promise<{ consultas: number; tokens: num
   return { consultas: rows[0]?.l ?? 50, tokens: rows[0]?.t ?? null };
 }
 
+/**
+ * Tokens que cuesta en promedio una consulta de este cliente.
+ * Se calcula sobre su histórico real; si aún no hay suficiente, se asume un
+ * valor conservador para no prometer más consultas de las que caben.
+ */
+const TOKENS_POR_CONSULTA_DEFECTO = 25_000;
+
+async function tokensPorConsultaDe(tenant: string): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(consultas),0)::float8 AS c,
+            COALESCE(SUM(tok_entrada + tok_salida + tok_cache_escritura + tok_cache_lectura),0)::float8 AS t
+     FROM uso_ia WHERE tenant_id = $1`, [tenant]
+  );
+  const { c, t } = rows[0];
+  if (c < 5 || t <= 0) return TOKENS_POR_CONSULTA_DEFECTO;
+  return Math.max(1000, t / c);
+}
+
 /** Tokens facturables del día (el caché de lectura cuesta bastante menos, pero cuenta). */
 async function tokensHoyDe(tenant: string): Promise<number> {
   const { rows } = await pool.query(
@@ -77,37 +103,46 @@ async function tokensHoyDe(tenant: string): Promise<number> {
 
 /** Consulta el estado sin consumir nada. */
 export async function estadoLimite(tenant = TENANT): Promise<EstadoLimite> {
-  const [topes, uso, tokensHoy] = await Promise.all([
+  const [topes, uso, tokensHoy, tokPorConsulta] = await Promise.all([
     topesDe(tenant),
     pool.query('SELECT consultas FROM uso_ia WHERE tenant_id = $1 AND fecha = $2::date',
       [tenant, hoyMx()]),
     tokensHoyDe(tenant),
+    tokensPorConsultaDe(tenant),
   ]);
+
   const usadas = uso.rows[0]?.consultas ?? 0;
   const porConsultas = usadas < topes.consultas;
   const porTokens = topes.tokens == null || tokensHoy < topes.tokens;
 
+  // El presupuesto de tokens se traduce a "cuántas consultas más caben".
+  const restanConteo = Math.max(0, topes.consultas - usadas);
+  const restanPresupuesto = topes.tokens == null
+    ? Infinity
+    : Math.max(0, Math.floor((topes.tokens - tokensHoy) / tokPorConsulta));
+
+  const disponibles = Math.min(restanConteo, restanPresupuesto);
+
+  // Total equivalente del día, para que el porcentaje sea coherente.
+  const totalPresupuesto = topes.tokens == null
+    ? Infinity
+    : Math.max(1, Math.floor(topes.tokens / tokPorConsulta));
+  const totalEquivalente = Math.min(topes.consultas, totalPresupuesto);
+
+  const permitido = porConsultas && porTokens && disponibles > 0;
+
   return {
-    permitido: porConsultas && porTokens,
+    permitido,
     usadas, limite: topes.consultas,
-    restantes: Math.max(0, topes.consultas - usadas),
+    restantes: restanConteo,
     motivo: !porConsultas ? 'consultas' : !porTokens ? 'tokens' : undefined,
     tokensHoy, tokensMax: topes.tokens,
-    pct: calcularPct(usadas, topes.consultas, tokensHoy, topes.tokens),
+    disponibles: permitido ? disponibles : 0,
+    totalEquivalente,
+    pct: totalEquivalente > 0
+      ? Math.min(100, Math.round(((totalEquivalente - disponibles) / totalEquivalente) * 100))
+      : 100,
   };
-}
-
-/**
- * Porcentaje consumido del día. Toma el mayor de los dos topes, porque el
- * que va más avanzado es el que va a detener al usuario.
- */
-export function calcularPct(
-  usadas: number, limite: number,
-  tokensHoy: number, tokensMax: number | null
-): number {
-  const pConsultas = limite > 0 ? (usadas / limite) * 100 : 0;
-  const pTokens = tokensMax && tokensMax > 0 ? (tokensHoy / tokensMax) * 100 : 0;
-  return Math.min(100, Math.round(Math.max(pConsultas, pTokens)));
 }
 
 /**
@@ -143,14 +178,9 @@ export async function consumir(costo = 1, tenant = TENANT): Promise<EstadoLimite
     return { ...actual, permitido: false };
   }
 
-  const usadas = rows[0].consultas;
-  const tokensHoy = await tokensHoyDe(tenant);
-  return {
-    permitido: true, usadas, limite,
-    restantes: Math.max(0, limite - usadas),
-    tokensHoy, tokensMax: topes.tokens,
-    pct: calcularPct(usadas, limite, tokensHoy, topes.tokens),
-  };
+  // Se recalcula el estado completo para que todos los caminos devuelvan
+  // exactamente la misma cifra de consultas disponibles.
+  return await estadoLimite(tenant);
 }
 
 

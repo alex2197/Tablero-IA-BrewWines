@@ -102,7 +102,11 @@ async function main() {
   const { rows } = await pool.query(
     `SELECT t.id, t.nombre, t.limite_ia_diario AS limite, t.tokens_dia_max AS tokmax,
             COALESCE(u.consultas, 0) AS hoy,
-            COALESCE(u.tok_entrada + u.tok_salida + u.tok_cache_escritura + u.tok_cache_lectura, 0) AS tokhoy
+            COALESCE(u.tok_entrada + u.tok_salida + u.tok_cache_escritura + u.tok_cache_lectura, 0) AS tokhoy,
+            (SELECT CASE WHEN SUM(consultas) >= 5 AND SUM(tok_entrada+tok_salida+tok_cache_escritura+tok_cache_lectura) > 0
+                    THEN SUM(tok_entrada+tok_salida+tok_cache_escritura+tok_cache_lectura)::float8 / SUM(consultas)
+                    ELSE 25000 END
+             FROM uso_ia WHERE tenant_id = t.id) AS tokprom
      FROM tenants t
      LEFT JOIN uso_ia u ON u.tenant_id = t.id
        AND u.fecha = (now() AT TIME ZONE 'America/Mexico_City')::date
@@ -115,22 +119,34 @@ async function main() {
   const aPesos = (tok: number) => (tok / 1e6) * usdPorMillon * TC;
 
   console.log(
-    'Cliente'.padEnd(16) + 'Consultas'.padStart(11) + 'Tokens hoy'.padStart(13) +
-    'Tope'.padStart(13) + (usdPorMillon ? 'Gasto hoy'.padStart(11) + 'Presup.'.padStart(10) : '')
+    'Cliente'.padEnd(14) + 'Ve el cliente'.padStart(15) + 'Consultas'.padStart(11) +
+    'Tokens hoy'.padStart(13) + 'Tope tok.'.padStart(12) +
+    (usdPorMillon ? 'Gasto hoy'.padStart(11) + 'Presup.'.padStart(9) : '')
   );
-  console.log('-'.repeat(usdPorMillon ? 74 : 53));
+  console.log('-'.repeat(usdPorMillon ? 85 : 65));
   for (const r of rows) {
     const tokhoy = Number(r.tokhoy);
+    const tokmax = r.tokmax ? Number(r.tokmax) : null;
+    const prom = Number(r.tokprom) || 25000;
+
+    // Misma fórmula que ve el cliente en la barra del chat
+    const restanConteo = Math.max(0, r.limite - r.hoy);
+    const restanPresup = tokmax == null ? Infinity : Math.max(0, Math.floor((tokmax - tokhoy) / prom));
+    const disponibles = Math.min(restanConteo, restanPresup);
+    const totalEq = Math.min(r.limite, tokmax == null ? Infinity : Math.max(1, Math.floor(tokmax / prom)));
+
     console.log(
-      String(r.nombre).slice(0, 15).padEnd(16) +
+      String(r.nombre).slice(0, 13).padEnd(14) +
+      `${disponibles} de ${totalEq}`.padStart(15) +
       `${r.hoy}/${r.limite}`.padStart(11) +
       tokhoy.toLocaleString('es-MX').padStart(13) +
-      (r.tokmax ? Number(r.tokmax).toLocaleString('es-MX') : '—').padStart(13) +
+      (tokmax ? tokmax.toLocaleString('es-MX') : '—').padStart(12) +
       (usdPorMillon
         ? ('$' + aPesos(tokhoy).toFixed(2)).padStart(11) +
-          (r.tokmax ? '$' + aPesos(Number(r.tokmax)).toFixed(0) : '—').padStart(10)
+          (tokmax ? '$' + aPesos(tokmax).toFixed(0) : '—').padStart(9)
         : '')
     );
+    console.log(`  promedio observado: ${Math.round(prom).toLocaleString('es-MX')} tokens por consulta`);
   }
   if (!usdPorMillon) {
     console.log('\n  Agrega los precios a .env para ver el gasto en pesos.');

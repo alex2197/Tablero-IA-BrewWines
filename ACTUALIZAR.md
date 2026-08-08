@@ -1,49 +1,71 @@
-# Ajuste — barra en tiempo real y botón de detener
+# Ajuste — una sola cifra para el cliente
 
-## 1. La barra ya no necesita refresh
+## El problema
 
-**Qué pasaba.** El porcentaje se calculaba en la ruta `/api/cupo`, pero cuando el
-chat terminaba una consulta recibía el cupo por otro camino que no lo incluía.
-Al no venir el dato, caía a 0 hasta que recargabas la página.
+Había dos límites y dos números que podían contradecirse: el chat bloqueado
+mientras el pie decía *"8 de 20 consultas"*. Al cliente le parecía un error.
 
-**Qué cambió.** El porcentaje ahora se calcula dentro de `estadoLimite()`, que es
-la función que usan todos los caminos. Así el número es el mismo se pida por donde
-se pida, y la barra avanza en cuanto termina cada consulta.
+## La solución
 
-## 2. Botón de detener
+**El presupuesto de tokens se traduce a consultas**, y se muestra siempre el menor
+de los dos. Una sola cifra, imposible de contradecir.
 
-Mientras la consulta corre, el botón de enviar se convierte en un **cuadro rojo de
-detener**. También aparece un enlace *"detener consulta"* debajo del indicador de
-actividad, por si el cursor está más cerca de ahí.
+```
+TE QUEDAN 12 CONSULTAS              de 20
+████████░░░░░░░░░░░░
+Se reinicia a medianoche
+```
 
-### Qué pasa al detener
+Al agotarse:
 
-| Momento | Qué se cobra |
-|---|---|
-| Antes de que la API responda | **Nada.** Se devuelve la consulta al contador |
-| A media respuesta | Solo los tokens que ya se generaron |
-| Con herramientas ya ejecutadas | Los tokens de esas llamadas |
+```
+SIN CONSULTAS DISPONIBLES
+████████████████████
+Alcanzaste tu límite de hoy · se reinicia a medianoche
+```
 
-El texto que alcanzó a escribirse se conserva, con la nota *"Consulta cancelada"*
-al final. Después de cancelar, la barra se relee del servidor para que refleje
-exactamente lo consumido.
+Nunca se menciona cuál de los dos topes se alcanzó. Para el cliente da igual.
 
-### Lo que sí y lo que no se puede devolver
+## La conversión
 
-**Los tokens ya generados no se devuelven**, porque ya se pagaron a la API. Lo que
-sí hace el botón es **cortar la generación** para que deje de gastar de inmediato.
+Se usa el promedio real de tokens por consulta **de ese cliente**, calculado sobre
+su histórico. Mientras haya menos de 5 consultas registradas se asume un valor
+conservador (25,000 tokens), para no prometer más consultas de las que caben.
 
-**El conteo de consultas sí se devuelve** si se cancela antes de que la API haya
-respondido algo. Es lo justo: no se usó nada.
+En cuanto hay uso real, el número se afina solo.
 
-### Cómo funciona por dentro
+### El efecto secundario que vale la pena
 
-El navegador corta la conexión con `AbortController`. El servidor lo detecta en el
-`cancel()` del stream, aborta la llamada al modelo, registra los tokens que
-alcanzaron a consumirse y, si no hubo ninguna respuesta, devuelve el cupo.
+Si el cliente hace una pregunta muy pesada, el contador puede bajar de 12 a 9 en
+lugar de a 11. Eso es intuitivo — *"esa pregunta me costó tres"* — y le enseña sin
+explicarle que las consultas complejas consumen más.
 
-Sin ese `abort` del lado del servidor, el modelo seguiría generando aunque nadie
-esté escuchando, y esos tokens se pagarían igual.
+### Ejemplos
+
+| Quedan por conteo | Alcanza el presupuesto para | Muestra |
+|---|---|---|
+| 12 | 18 | **12** |
+| 12 | 3 | **3** |
+| 12 | 0 | **0**, bloqueado |
+
+## Tu vista no cambia
+
+```cmd
+npm run limite
+```
+
+```
+Cliente        Ve el cliente  Consultas   Tokens hoy   Tope tok.   Gasto hoy  Presup.
+Brew Wines           12 de 20       8/20      198,432     522,466       $9.49      $25
+  promedio observado: 24,804 tokens por consulta
+```
+
+La primera columna es exactamente lo que ve el cliente. El resto es tu desglose:
+consultas reales, tokens, tope y gasto en pesos.
+
+Ahí también ves el **promedio observado**, que es el número que usa la conversión.
+Si es muy distinto a 25,000, ya tienes datos suficientes para ajustar el
+presupuesto con criterio.
 
 ## Pasos
 
@@ -51,16 +73,8 @@ esté escuchando, y esos tokens se pagarían igual.
 npm install
 npm run build
 git add .
-git commit -m "Barra en tiempo real y boton de detener"
+git commit -m "Una sola cifra de consultas disponibles"
 git push
 ```
 
 Sin migración.
-
-### Para probar
-
-1. Haz una pregunta y verifica que la barra avance sin recargar
-2. Haz otra y toca el cuadro rojo apenas empiece: debe cancelarse y **no** subir
-   el contador de consultas
-3. Haz una tercera y déjala responder a medias antes de cancelar: ahí sí cuenta,
-   porque ya se generaron tokens

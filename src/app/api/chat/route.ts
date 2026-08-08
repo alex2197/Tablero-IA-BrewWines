@@ -125,10 +125,7 @@ export async function POST(req: Request) {
   if (!cupo.permitido) {
     return Response.json({
       error: 'limite_alcanzado',
-      mensaje: cupo.motivo === 'tokens'
-      ? 'Se alcanzó el presupuesto de consumo de hoy. El contador se reinicia a medianoche.'
-      : `Llegaste al límite de ${cupo.limite} consultas de hoy. ` +
-        `El contador se reinicia a medianoche.`,
+      mensaje: 'Alcanzaste tu límite de consultas de hoy. Se reinicia a medianoche.',
       ...cupo,
     }, { status: 429 });
   }
