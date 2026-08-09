@@ -77,6 +77,88 @@ interface DefArchivo {
   requerido: boolean;
 }
 
+/**
+ * Nombres de almacén por defecto, tomados del reporte de Power BI del cliente.
+ * Solo se usan si el Excel no trae la segunda fila de encabezados.
+ */
+export const ALMACENES_POR_DEFECTO: Record<string, string> = {
+  'ALM-01': 'Almacén Principal',
+  'ALM-02': 'Teravino 48 Hrs',
+  'ALM-03': 'Cancún',
+  'ALM-04': 'Querétaro',
+  'ALM-05': 'Rosanegra (Cabos)',
+  'ALM-06': 'Fishers (Foráneos)',
+  'ALM-07': 'La Comer Cajas',
+  'ALM-08': 'Almex',
+  'ALM-09': 'Alminter',
+  'ALM-10': 'Vernazza',
+  'ALM-11': 'Tránsito',
+  'ALM-12': 'Merma',
+  'ALM-13': 'Amazon',
+  'ALM-14': 'En Proceso (Almex)',
+  'ALM-15': 'Departamentales',
+};
+
+/** Convierte "TERAVINO 48 HRS" en "Teravino 48 Hrs", respetando paréntesis. */
+function capitalizar(t: string): string {
+  return t.toLowerCase().replace(/(^|[\s(])([a-záéíóúñ])/g, (_, p, c) => p + c.toUpperCase());
+}
+
+/**
+ * El Excel de inventario tiene DOS filas de encabezado: la primera con los
+ * códigos (ALM-01) y la segunda con el nombre real del almacén. Aquí se lee
+ * la segunda para armar el catálogo.
+ */
+function leerNombresAlmacen(buf: Buffer | ArrayBuffer): unknown[][] {
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const hoja = wb.Sheets['INVENTARIO'] ?? wb.Sheets[wb.SheetNames[0]];
+  if (!hoja) return [];
+
+  const matriz = XLSX.utils.sheet_to_json<unknown[]>(hoja, { header: 1, defval: null });
+  const codigos = (matriz[0] ?? []) as unknown[];
+  const nombres = (matriz[1] ?? []) as unknown[];
+
+  const salida: unknown[][] = [];
+  const vistos = new Set<string>();
+
+  codigos.forEach((cod, i) => {
+    const c = txt(cod)?.toUpperCase();
+    if (!c || !/^ALM-\d+$/.test(c) || vistos.has(c)) return;
+    vistos.add(c);
+    // El catálogo conocido va primero porque trae los acentos correctos
+    // (el Excel escribe CANCUN, QUERETARO, TRANSITO sin acentuar).
+    const crudo = txt(nombres[i]);
+    const nombre = ALMACENES_POR_DEFECTO[c]
+      ?? (crudo && crudo.toUpperCase() !== c ? capitalizar(crudo) : c);
+    salida.push([c, nombre]);
+  });
+
+  // Completar los que existan en el catálogo pero no en el archivo
+  for (const [c, n] of Object.entries(ALMACENES_POR_DEFECTO)) {
+    if (!vistos.has(c)) salida.push([c, n]);
+  }
+  return salida;
+}
+
+/**
+ * El Excel de inventario trae una columna por almacén (ALM-01 … ALM-15).
+ * Se convierten en filas para poder agrupar por almacén en las consultas.
+ */
+function expandirAlmacenes(filas: Record<string, unknown>[]): unknown[][] {
+  const salida: unknown[][] = [];
+  for (const r of filas) {
+    const clave = txt(r['Clave de producto']);
+    if (!clave) continue;
+    for (const col of Object.keys(r)) {
+      if (!/^ALM-\d+$/i.test(col)) continue;
+      const cant = num(r[col]);
+      if (!cant || cant <= 0) continue;
+      salida.push([clave, col.toUpperCase(), Math.round(cant)]);
+    }
+  }
+  return salida;
+}
+
 export const ARCHIVOS: DefArchivo[] = [
   {
     archivo: 'Vendedores.xlsx', tabla: 'vendedores', requerido: true,
@@ -226,6 +308,31 @@ export function analizar(archivos: ArchivoEntrada[]): Analisis {
     datos.set(def.tabla, { columnas: def.columnas, filas: validas });
   }
 
+  // Las existencias por almacén salen del mismo archivo de inventario,
+  // pero necesitan un tratamiento distinto: son columnas, no filas.
+  const entradaInv = porNombre.get('inventario.xlsx');
+  if (entradaInv) {
+    try {
+      const { filas } = leerHoja(entradaInv.buffer, 'INVENTARIO');
+      const alm = expandirAlmacenes(filas);
+      datos.set('inventario_almacen', {
+        columnas: ['producto_clave', 'almacen', 'existencias'],
+        filas: alm,
+      });
+      datos.set('almacenes', {
+        columnas: ['codigo', 'nombre'],
+        filas: leerNombresAlmacen(entradaInv.buffer),
+      });
+      const t = tablas.find(x => x.tabla === 'inventario');
+      if (t && alm.length) {
+        const almacenes = new Set(alm.map(f => String(f[1])));
+        t.avisos.push(`${almacenes.size} almacenes detectados (${alm.length} existencias)`);
+      }
+    } catch {
+      // Si el archivo no trae columnas ALM, simplemente no hay desglose.
+    }
+  }
+
   // Resumen de ventas para que el usuario confirme que son sus datos
   const ventas = datos.get('ventas')?.filas ?? [];
   const fechas = ventas.map(f => String(f[0])).filter(Boolean).sort();
@@ -248,7 +355,8 @@ export function analizar(archivos: ArchivoEntrada[]): Analisis {
 /* ------------------------- fase 2: escribir ------------------------- */
 
 /** Orden de escritura: catálogos antes que transaccionales. */
-const ORDEN = ['vendedores', 'clientes', 'productos', 'inventario', 'ventas', 'cuentas_por_cobrar'];
+const ORDEN = ['vendedores', 'clientes', 'productos', 'almacenes', 'inventario',
+               'inventario_almacen', 'ventas', 'cuentas_por_cobrar'];
 
 export async function escribir(
   pool: Pool,

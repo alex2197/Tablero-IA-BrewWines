@@ -12,11 +12,11 @@
     "db:cargar": "tsx scripts/cargar.ts",
     "evals": "tsx evals/correr.ts",
     "db:migrar": "tsx scripts/migrar.ts",
-    "db:reclasificadas": "tsx scripts/marketing.ts",
     "limite": "tsx scripts/limite.ts",
     "acceso": "tsx scripts/acceso.ts",
     "db:renombrar": "tsx scripts/renombrar.ts",
-    "costo": "tsx scripts/costo.ts"
+    "costo": "tsx scripts/costo.ts",
+    "regla": "tsx scripts/regla.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

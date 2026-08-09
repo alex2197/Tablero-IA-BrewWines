@@ -37,15 +37,46 @@ export interface Resultado {
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const MES = /^\d{4}-\d{2}$/;
 
+/* ------------------------------------------------------------------ */
+/* Reglas de negocio configurables por cliente                         */
+/* ------------------------------------------------------------------ */
+
+export interface Reglas {
+  /** Precio unitario mínimo para que una línea cuente como ingreso. */
+  umbralMarketing: number | null;
+}
+
+let cacheReglas: { v: Reglas; t: number } | null = null;
+
+export async function reglas(): Promise<Reglas> {
+  if (cacheReglas && Date.now() - cacheReglas.t < 60_000) return cacheReglas.v;
+  const { rows } = await pool.query(
+    'SELECT umbral_marketing FROM tenants WHERE id = $1', [TENANT]
+  );
+  const u = rows[0]?.umbral_marketing;
+  const v: Reglas = { umbralMarketing: u == null ? null : Number(u) };
+  cacheReglas = { v, t: Date.now() };
+  return v;
+}
+
 function validarFecha(v: string | null | undefined, campo: string) {
   if (!v) return null;
   if (!ISO.test(v)) throw new Error(`${campo} debe ser YYYY-MM-DD, se recibió "${v}"`);
   return v;
 }
 
-/** Construye el WHERE compartido por todas las consultas sobre ventas. */
-function armar(f: Filtros, params: unknown[]) {
+/**
+ * Construye el WHERE compartido por todas las consultas sobre ventas.
+ *
+ * `umbral` es la regla de negocio del cliente: las líneas por debajo de ese
+ * precio unitario no cuentan como ingreso, se clasifican como marketing.
+ */
+function armar(f: Filtros, params: unknown[], umbral: number | null = null) {
   const where = ['v.tenant_id = $1'];
+  if (umbral != null) {
+    params.push(umbral);
+    where.push(`v.precio_unitario >= $${params.length}`);
+  }
   const add = (tpl: string, val: unknown) => {
     params.push(val);
     where.push(tpl.replace(/\?/g, `$${params.length}`));
@@ -70,7 +101,9 @@ const JOINS = `
   FROM ventas v
   LEFT JOIN clientes   c   ON c.tenant_id = v.tenant_id AND c.clave = v.cliente_clave
   LEFT JOIN vendedores ven ON ven.tenant_id = v.tenant_id AND ven.clave = v.vendedor_clave
-  LEFT JOIN productos  p   ON p.tenant_id = v.tenant_id AND p.clave = v.producto_clave`;
+  LEFT JOIN productos  p   ON p.tenant_id = v.tenant_id AND p.clave = v.producto_clave
+  LEFT JOIN almacenes  alm ON alm.tenant_id = v.tenant_id
+                          AND alm.codigo = 'ALM-' || LPAD(v.bodega::text, 2, '0')`;
 
 export async function consultar(opts: {
   metricas: string[];
@@ -93,7 +126,7 @@ export async function consultar(opts: {
   if (dim) sel.unshift(`${DIMENSIONES[dim].sql} AS etiqueta`);
 
   const params: unknown[] = [TENANT];
-  const where = armar(filtros, params);
+  const where = armar(filtros, params, (await reglas()).umbralMarketing);
 
   const idxOrden = ms.findIndex(m => !('noAditiva' in METRICAS[m]));
   const colOrden = (idxOrden >= 0 ? idxOrden : 0) + 2;
@@ -132,7 +165,7 @@ export async function consultar(opts: {
 
 export async function resumenClientes(f: Filtros = {}) {
   const params: unknown[] = [TENANT];
-  const where = armar(f, params);
+  const where = armar(f, params, (await reglas()).umbralMarketing);
 
   // Clientes totales del catálogo (excluye suspendidos, como el DAX original)
   const tot = await pool.query(
@@ -258,7 +291,7 @@ export async function metricasCxC(f: Filtros = {}) {
 
   // DSO = saldo del periodo / ingresos del periodo × días del periodo
   const params: unknown[] = [TENANT];
-  const where = armar(f, params);
+  const where = armar(f, params, (await reglas()).umbralMarketing);
   const ing = await pool.query(
     `SELECT COALESCE(SUM(v.monto_total),0)::float8 AS ingresos,
             (MAX(v.fecha) - MIN(v.fecha) + 1)::int AS dias
@@ -335,16 +368,39 @@ export async function resumenInventario() {
   return rows[0];
 }
 
+/**
+ * Existencias por almacén. Usa inventario_almacen, que viene de las columnas
+ * ALM-01 … ALM-15 del Excel. La columna LUGAR del inventario es la posición
+ * en el rack, no el almacén, así que no sirve para esto.
+ */
 export async function inventarioPorBodega() {
   const { rows } = await pool.query(
-    `SELECT COALESCE(lugar,'Sin bodega') AS bodega,
+    `SELECT COALESCE(al.nombre, a.almacen) AS bodega,
+            SUM(a.existencias)::int AS unidades,
+            SUM(a.existencias * COALESCE(i.costo, 0))::float8 AS valor
+     FROM inventario_almacen a
+     LEFT JOIN inventario i
+       ON i.tenant_id = a.tenant_id AND i.producto_clave = a.producto_clave
+     LEFT JOIN almacenes al
+       ON al.tenant_id = a.tenant_id AND al.codigo = a.almacen
+     WHERE a.tenant_id = $1
+     GROUP BY 1
+     HAVING SUM(a.existencias) > 0
+     ORDER BY unidades DESC`,
+    [TENANT]
+  );
+  if (rows.length) return rows;
+
+  // Respaldo si aún no se ha recargado el inventario con el desglose
+  const alt = await pool.query(
+    `SELECT COALESCE(NULLIF(lugar,'0'),'Sin ubicación') AS bodega,
             SUM(existencias)::int AS unidades,
             SUM(existencias * costo)::float8 AS valor
      FROM inventario WHERE tenant_id = $1
-     GROUP BY 1 ORDER BY unidades DESC`,
+     GROUP BY 1 ORDER BY unidades DESC LIMIT 15`,
     [TENANT]
   );
-  return rows;
+  return alt.rows;
 }
 
 export async function inventarioSinMovimiento(limite = 15) {
@@ -362,29 +418,92 @@ export async function inventarioSinMovimiento(limite = 15) {
 }
 
 /* ================================================================== */
-/* VENTAS RECLASIFICADAS                                               */
+/* MARKETING (regla del cliente)                                       */
 /* ================================================================== */
 
+/** Precio unitario por debajo del cual una línea es claramente una cortesía. */
+export const UMBRAL_BONIFICACION = 5;
+
+/** Umbral que usaba el Power BI para separar "marketing" de ventas. */
+export const UMBRAL_POWERBI = 190;
+
 /**
- * En el Power BI original esta tabla se llamaba "Marketing" y alimentaba
- * las medidas "Margen Neto" y "ROI Marketing". No es gasto publicitario:
- * son ventas menores a $190 que el cliente pidió agrupar aparte.
- * Se expone como dato informativo, nunca como gasto.
+ * Costo real del producto entregado como cortesía.
+ *
+ * Es el gasto verdadero del muestreo comercial: el costo de las botellas que
+ * salieron a precio simbólico, no su precio de lista.
  */
-export async function ventasReclasificadas(f: Filtros = {}) {
+export async function costoMuestreo(f: Filtros = {}) {
   const { rows } = await pool.query(
-    `SELECT periodo, monto::float8, concepto FROM ventas_reclasificadas
-     WHERE tenant_id = $1 ORDER BY periodo`, [TENANT]
+    `SELECT TO_CHAR(fecha,'YYYY-MM') AS periodo,
+            SUM(costo_unitario * unidades)::float8 AS costo,
+            SUM(unidades)::int                     AS botellas,
+            COUNT(*)::int                          AS lineas
+     FROM ventas
+     WHERE tenant_id = $1 AND precio_unitario <= $2
+     GROUP BY 1 ORDER BY 1`,
+    [TENANT, UMBRAL_BONIFICACION]
   );
-  const filtrado = f.meses?.length ? rows.filter(r => f.meses!.includes(r.periodo)) : rows;
+  const sel = f.meses?.length ? rows.filter(r => f.meses!.includes(r.periodo)) : rows;
   return {
     filas: rows,
-    monto: filtrado.reduce((a, r) => a + r.monto, 0),
-    concepto: rows[0]?.concepto ?? 'Sin concepto',
-    advertencia:
-      'Estos montos NO son gasto de marketing. Agrupan ventas menores a $190 ' +
-      'según un criterio de clasificación del cliente. No usar para calcular ' +
-      'margen neto ni retorno de inversión publicitaria.',
+    costo: sel.reduce((a, r) => a + r.costo, 0),
+    botellas: sel.reduce((a, r) => a + r.botellas, 0),
+    umbral: UMBRAL_BONIFICACION,
+  };
+}
+
+/**
+ * Marketing según la regla del cliente: monto de las líneas con precio unitario
+ * por debajo del umbral configurado.
+ *
+ * Devuelve además el desglose que permite entender de qué se compone:
+ *   - cortesías reales (precio simbólico), donde el gasto verdadero es el costo
+ *   - ventas a precio bajo, que son venta normal de vino económico
+ *
+ * Ese desglose no cambia la cifra; sirve para que el cliente pueda revisar el
+ * criterio con información en la mano.
+ */
+export async function marketing(f: Filtros = {}) {
+  const { umbralMarketing } = await reglas();
+  if (umbralMarketing == null) {
+    return { activa: false, umbral: null, filas: [], monto: 0, desglose: null };
+  }
+
+  const { rows } = await pool.query(
+    `SELECT TO_CHAR(fecha,'YYYY-MM')            AS periodo,
+            SUM(monto_total)::float8            AS monto,
+            SUM(unidades)::int                  AS botellas,
+            COUNT(*)::int                       AS lineas
+     FROM ventas
+     WHERE tenant_id = $1 AND precio_unitario < $2
+     GROUP BY 1 ORDER BY 1`,
+    [TENANT, umbralMarketing]
+  );
+
+  const sel = f.meses?.length ? rows.filter(r => f.meses!.includes(r.periodo)) : rows;
+
+  const d = await pool.query(
+    `SELECT
+       SUM(monto_total) FILTER (WHERE precio_unitario <= $3)::float8               AS cortesia_monto,
+       SUM(costo_unitario*unidades) FILTER (WHERE precio_unitario <= $3)::float8   AS cortesia_costo,
+       SUM(unidades) FILTER (WHERE precio_unitario <= $3)::int                     AS cortesia_botellas,
+       COUNT(*) FILTER (WHERE precio_unitario <= $3)::int                          AS cortesia_lineas,
+       SUM(monto_total) FILTER (WHERE precio_unitario > $3)::float8                AS bajo_monto,
+       SUM(unidades) FILTER (WHERE precio_unitario > $3)::int                      AS bajo_botellas,
+       COUNT(*) FILTER (WHERE precio_unitario > $3)::int                           AS bajo_lineas,
+       AVG(precio_unitario) FILTER (WHERE precio_unitario > $3)::float8            AS bajo_precio_prom
+     FROM ventas
+     WHERE tenant_id = $1 AND precio_unitario < $2`,
+    [TENANT, umbralMarketing, UMBRAL_BONIFICACION]
+  );
+
+  return {
+    activa: true,
+    umbral: umbralMarketing,
+    filas: rows,
+    monto: sel.reduce((a, r) => a + r.monto, 0),
+    desglose: d.rows[0] ?? null,
   };
 }
 
@@ -402,9 +521,9 @@ export interface PuntoForecast {
 }
 
 /**
- * Reemplaza el "forecast" del Power BI (que era Ingresos × 0.85 y × 1.20,
- * o sea la misma curva escalada) por una regresión lineal real proyectada
- * a meses futuros, con banda de confianza basada en el error histórico.
+ * Reemplaza el "forecast" del Power BI (que era Ingresos x 0.85 y x 1.20, o sea
+ * la misma curva escalada) por una regresión lineal real proyectada a meses
+ * futuros, con banda de confianza basada en el error histórico.
  */
 export async function forecast(mesesAdelante = 3): Promise<{
   puntos: PuntoForecast[];
@@ -412,17 +531,20 @@ export async function forecast(mesesAdelante = 3): Promise<{
   pendiente: number;
   metodo: string;
 }> {
+  const { umbralMarketing } = await reglas();
   const { rows } = await pool.query(
     `SELECT TO_CHAR(fecha,'YYYY-MM') AS mes, SUM(monto_total)::float8 AS venta,
             COUNT(DISTINCT fecha)::int AS dias_con_venta
-     FROM ventas WHERE tenant_id = $1 GROUP BY 1 ORDER BY 1`,
-    [TENANT]
+     FROM ventas
+     WHERE tenant_id = $1 AND ($2::numeric IS NULL OR precio_unitario >= $2::numeric)
+     GROUP BY 1 ORDER BY 1`,
+    [TENANT, umbralMarketing]
   );
   if (rows.length < 3) return { puntos: [], r2: 0, pendiente: 0, metodo: 'datos insuficientes' };
 
-  // El último mes puede estar incompleto: se anualiza para no sesgar la recta.
+  // El último mes puede estar incompleto: se excluye para no sesgar la recta.
   const ultimo = rows[rows.length - 1];
-  const diasMes = new Date(+ultimo.mes.slice(0,4), +ultimo.mes.slice(5,7), 0).getDate();
+  const diasMes = new Date(+ultimo.mes.slice(0, 4), +ultimo.mes.slice(5, 7), 0).getDate();
   const parcial = ultimo.dias_con_venta < diasMes * 0.6;
 
   const base = parcial ? rows.slice(0, -1) : rows;
@@ -430,8 +552,8 @@ export async function forecast(mesesAdelante = 3): Promise<{
   const xs = base.map((_, i) => i);
   const ys = base.map(r => r.venta);
 
-  const mx = xs.reduce((a,b) => a+b, 0) / n;
-  const my = ys.reduce((a,b) => a+b, 0) / n;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
   const num = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0);
   const den = xs.reduce((a, x) => a + (x - mx) ** 2, 0) || 1;
   const m = num / den;
@@ -444,12 +566,8 @@ export async function forecast(mesesAdelante = 3): Promise<{
   const err = Math.sqrt(ssRes / Math.max(n - 2, 1));
 
   const puntos: PuntoForecast[] = rows.map((r, i) => ({
-    mes: r.mes,
-    real: r.venta,
-    tendencia: Math.max(0, pred(i)),
-    conservador: null,
-    optimista: null,
-    proyectado: false,
+    mes: r.mes, real: r.venta, tendencia: Math.max(0, pred(i)),
+    conservador: null, optimista: null, proyectado: false,
   }));
 
   const ultIdx = rows.length - 1;
@@ -460,11 +578,8 @@ export async function forecast(mesesAdelante = 3): Promise<{
     const p = Math.max(0, pred(i));
     puntos.push({
       mes: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-      real: null,
-      tendencia: p,
-      conservador: Math.max(0, p - err),
-      optimista: p + err,
-      proyectado: true,
+      real: null, tendencia: p,
+      conservador: Math.max(0, p - err), optimista: p + err, proyectado: true,
     });
   }
 
@@ -512,6 +627,10 @@ export interface Alerta {
   severidad: 'alta' | 'media' | 'baja';
   titulo: string; detalle: string; accion: string;
 }
+
+/** Conceptos que no corresponden a venta de vino. */
+const NO_COMERCIALES = ['VEHICULO USADO', 'NOTA DE CREDITO', 'DEVOLUCIONES',
+                        'SERVICIOS DE FACTURACION'];
 
 export async function alertas(): Promise<Alerta[]> {
   const out: Alerta[] = [];
@@ -565,15 +684,55 @@ export async function alertas(): Promise<Alerta[]> {
       accion: 'Campaña de reactivación con el equipo de ventas' });
   }
 
-  const neg = await pool.query(
-    `SELECT COUNT(*)::int AS n, SUM(monto_total - costo_unitario*unidades)::float8 AS perdida
-     FROM ventas WHERE tenant_id=$1 AND (monto_total - costo_unitario*unidades) < 0`, [TENANT]);
-  if (neg.rows[0]?.n > 0) {
-    const r = neg.rows[0];
-    out.push({ severidad:'baja',
-      titulo: `${r.n} líneas vendidas por debajo del costo`,
-      detalle: `Pérdida acumulada de ${fmt(Math.abs(r.perdida),'moneda')}. Revisa si son bonificaciones o muestras mal capturadas.`,
-      accion: 'Revisar captura de bonificaciones y descuentos' });
+  // Cortesías: el costo real del muestreo comercial
+  const bon = await pool.query(
+    `SELECT COUNT(*)::int AS n, SUM(unidades)::int AS botellas,
+            SUM(costo_unitario * unidades)::float8 AS costo
+     FROM ventas WHERE tenant_id = $1 AND precio_unitario <= $2`,
+    [TENANT, UMBRAL_BONIFICACION]);
+  if (bon.rows[0]?.n > 0) {
+    const r = bon.rows[0];
+    out.push({ severidad: 'baja',
+      titulo: `${fmt(r.costo, 'moneda')} en producto entregado como cortesía`,
+      detalle: `${r.botellas.toLocaleString('es-MX')} botellas en ${r.n} líneas con precio unitario de $${UMBRAL_BONIFICACION} o menos. Ese es el costo real del muestreo comercial.`,
+      accion: 'Confirmar que son bonificaciones autorizadas y no errores de captura' });
+  }
+
+  // Ventas que el reporte anterior dejaba fuera por su filtro de precio
+  const { umbralMarketing } = await reglas();
+  if (umbralMarketing == null) {
+    const excl = await pool.query(
+      `SELECT COUNT(*)::int AS n, SUM(unidades)::int AS botellas,
+              SUM(monto_total)::float8 AS monto, AVG(precio_unitario)::float8 AS precio
+       FROM ventas
+       WHERE tenant_id = $1 AND precio_unitario > $2 AND precio_unitario < $3`,
+      [TENANT, UMBRAL_BONIFICACION, UMBRAL_POWERBI]);
+    if (excl.rows[0]?.n > 0) {
+      const r = excl.rows[0];
+      out.push({ severidad: 'media',
+        titulo: `${fmt(r.monto, 'moneda')} en ventas que el reporte anterior no mostraba`,
+        detalle: `${r.n} líneas con precio unitario promedio de ${fmt(r.precio, 'moneda')} y ${r.botellas.toLocaleString('es-MX')} botellas. El reporte anterior las clasificaba como gasto de marketing por estar debajo de $${UMBRAL_POWERBI}.`,
+        accion: 'Confirmar el criterio: parecen venta de vino económico, no promoción' });
+    }
+  }
+
+  // Conceptos que no son venta de vino y distorsionan precios promedio
+  const nc = await pool.query(
+    `SELECT descripcion_agg AS concepto, monto, lineas FROM (
+       SELECT MAX(p.descripcion) AS descripcion_agg,
+              SUM(v.monto_total)::float8 AS monto, COUNT(*)::int AS lineas
+       FROM ventas v
+       LEFT JOIN productos p ON p.tenant_id = v.tenant_id AND p.clave = v.producto_clave
+       WHERE v.tenant_id = $1 AND p.descripcion = ANY($2)
+       GROUP BY p.descripcion
+     ) t WHERE monto <> 0`,
+    [TENANT, NO_COMERCIALES]);
+  if (nc.rows.length) {
+    const total = nc.rows.reduce((a, r) => a + Math.abs(r.monto), 0);
+    out.push({ severidad: 'media',
+      titulo: `${fmt(total, 'moneda')} en conceptos que no son venta de vino`,
+      detalle: `Incluye: ${nc.rows.map((r: { concepto: string; monto: number }) => `${r.concepto} (${fmt(r.monto, 'moneda')})`).join(', ')}. Están sumando a los ingresos y distorsionan el precio promedio por botella.`,
+      accion: 'Decidir si deben contarse como ingreso o registrarse aparte' });
   }
 
   return out;

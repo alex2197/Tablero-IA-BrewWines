@@ -15,7 +15,7 @@ const SUGERENCIAS = [
   '¿Quién me debe más?',
   'Llévame a Canales',
   '¿Qué debo revisar?',
-  'Genera el reporte para la junta',
+  '¿Cómo se calcula el margen?',
 ];
 
 /** Verde mientras hay holgura, ámbar al 75%, rojo al 90% o agotado. */

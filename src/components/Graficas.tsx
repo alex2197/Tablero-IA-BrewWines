@@ -185,6 +185,7 @@ function CeldaTreemap(props: NodoTreemap) {
   const cabe = width > 62 && height > 30;
   return (
     <g>
+      <title>{`${etiqueta}: ${compacto(valor)}`}</title>
       <rect x={x} y={y} width={width} height={height} fill={color} stroke={T.papel} strokeWidth={2} />
       {cabe && (
         <>
@@ -200,13 +201,39 @@ function CeldaTreemap(props: NodoTreemap) {
   );
 }
 
+/**
+ * El Tooltip genérico de Recharts no recibe el nombre en un Treemap con
+ * contenido personalizado, así que se arma aquí a partir del payload.
+ */
+function TooltipTreemap({ active, payload, total }: {
+  active?: boolean;
+  payload?: { payload?: { etiqueta?: string; valor?: number } }[];
+  total: number;
+}) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d?.etiqueta) return null;
+  const pct = total > 0 ? ((d.valor ?? 0) / total) * 100 : 0;
+  return (
+    <div style={{ ...tooltipEstilo, padding: '6px 9px' }}>
+      <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: T.vino, marginBottom: 2 }}>
+        {d.etiqueta}
+      </div>
+      <div style={{ fontSize: 11, color: T.humo }}>
+        {mxn(d.valor ?? 0)} · {pct.toFixed(1)}%
+      </div>
+    </div>
+  );
+}
+
 export function Mapa({ datos, alto = 250 }: { datos: { etiqueta: string; valor: number }[]; alto?: number }) {
   if (!datos.length) return <Vacio />;
+  const total = datos.reduce((a, d) => a + d.valor, 0);
   return (
     <ResponsiveContainer width="100%" height={alto}>
       <Treemap data={datos} dataKey="valor" nameKey="etiqueta" stroke={T.papel}
         content={<CeldaTreemap />} isAnimationActive={false}>
-        <Tooltip contentStyle={tooltipEstilo} formatter={(v: number) => [mxn(v), '']} />
+        <Tooltip content={<TooltipTreemap total={total} />} />
       </Treemap>
     </ResponsiveContainer>
   );

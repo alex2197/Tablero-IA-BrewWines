@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export type Vista =
   | 'ventas' | 'canales' | 'productos' | 'productividad'
-  | 'retencion' | 'operativos' | 'forecast' | 'alertas';
+  | 'retencion' | 'operativos' | 'forecast' | 'alertas' | 'criterios';
 
 export const VISTAS: [Vista, string][] = [
   ['ventas', 'Ventas General'],
@@ -13,6 +13,7 @@ export const VISTAS: [Vista, string][] = [
   ['operativos', 'Operativos'],
   ['forecast', 'Forecast'],
   ['alertas', 'Alertas'],
+  ['criterios', 'Criterios'],
 ];
 
 export interface Traza {

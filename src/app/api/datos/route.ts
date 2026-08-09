@@ -4,7 +4,7 @@ import {
   consultar, cartera, carteraAntiguedad, metricasCxC,
   inventarioSinMovimiento, inventarioPorBodega, resumenInventario,
   resumenClientes, clientesDormidos, retencionMensual,
-  ventasReclasificadas, forecast, contexto, type Filtros,
+  marketing, costoMuestreo, forecast, contexto, reglas, type Filtros,
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     if (!acceso.permitido) return respuestaSinAcceso(acceso);
 
     const ctx = await contexto();
+    const rg = await reglas();
     const M = ['venta_neta','costo_total','margen_bruto','margen_pct','unidades',
                'facturas','clientes_activos','ticket_promedio','precio_promedio','ingreso_por_cliente'];
 
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
         const matriz = await consultar({
           metricas: ['venta_neta'], agrupar: 'mes', filtros: f, limite: 60,
         });
-        return Response.json({ ctx, kpis: kpis.filas[0] ?? {}, mensual: mensual.filas,
+        return Response.json({ ctx, rg, kpis: kpis.filas[0] ?? {}, mensual: mensual.filas,
           topProd: topProd.filas, porVend: porVend.filas, meses: matriz.filas.map(r => r.etiqueta), sql: kpis.sql });
       }
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
           consultar({ metricas: M, filtros: f }),
           consultar({ metricas: ['venta_neta','unidades','margen_pct'], agrupar: 'producto', filtros: f, limite: 10 }),
           consultar({ metricas: ['venta_neta','unidades'], agrupar: 'producto', filtros: f, orden: 'asc', limite: 5 }),
-          consultar({ metricas: ['venta_neta'], agrupar: 'linea', filtros: f, limite: 14 }),
+          consultar({ metricas: ['venta_neta'], agrupar: 'categoria', filtros: f, limite: 14 }),
           consultar({ metricas: ['venta_neta'], agrupar: 'bodega', filtros: f, limite: 14 }),
           consultar({ metricas: ['venta_neta','unidades','margen_pct','precio_promedio'], agrupar: 'producto', filtros: f, limite: 300 }),
         ]);
@@ -127,10 +128,10 @@ export async function GET(req: NextRequest) {
 
       /* ---------- 7. FORECAST ---------- */
       case 'forecast': {
-        const [fc, recla, kpis] = await Promise.all([
-          forecast(3), ventasReclasificadas(f), consultar({ metricas: M, filtros: f }),
+        const [fc, mkt, muestreo, kpis] = await Promise.all([
+          forecast(3), marketing(f), costoMuestreo(f), consultar({ metricas: M, filtros: f }),
         ]);
-        return Response.json({ ctx, fc, recla, kpis: kpis.filas[0] ?? {} });
+        return Response.json({ ctx, rg, fc, mkt, muestreo, kpis: kpis.filas[0] ?? {} });
       }
 
       default:

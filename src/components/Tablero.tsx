@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useEstado, VISTAS, type Vista } from '@/store/estado';
 import Chat from './Chat';
 import VistaAlertas from './VistaAlertas';
+import VistaCriterios from './VistaCriterios';
 import { T } from '@/lib/tema';
 import { nombreMes } from '@/lib/formato';
 import {
@@ -34,7 +35,8 @@ export default function Tablero() {
   }, []);
 
   useEffect(() => {
-    if (vista === 'alertas') { setCargando(false); return; }
+    // Estas vistas traen sus propios datos
+    if (vista === 'alertas' || vista === 'criterios') { setCargando(false); return; }
     const ac = new AbortController();
     setCargando(true); setError(null);
 
@@ -152,6 +154,15 @@ export default function Tablero() {
 
           {/* Rastro: cada acción deja huella reversible */}
           <div className="flex gap-1.5 flex-wrap items-center mt-2.5 min-h-[26px]">
+            {datos?.rg?.umbralMarketing != null && (
+              <span className="inline-flex items-center gap-1.5 bg-white border px-2 py-0.5 font-mono text-[10.5px]"
+                style={{ borderColor: T.linea2, borderLeft: `3px solid ${T.ambar}`, color: T.humo }}
+                title={`Regla del negocio: las líneas con precio unitario menor a $${datos.rg.umbralMarketing} se registran como marketing y no cuentan como ingreso.`}>
+                <span style={{ borderBottom: `1px dotted ${T.linea2}`, cursor: 'help' }}>
+                  ventas &lt; ${datos.rg.umbralMarketing} → marketing
+                </span>
+              </span>
+            )}
             {trazas.length === 0 ? (
               <span className="etiqueta">sin filtros · periodo completo</span>
             ) : trazas.map(t => (
@@ -191,6 +202,8 @@ export default function Tablero() {
           </div>
         ) : vista === 'alertas' ? (
           <VistaAlertas />
+        ) : vista === 'criterios' ? (
+          <VistaCriterios />
         ) : cargando && !datos ? (
           <p className="etiqueta py-8">Cargando…</p>
         ) : datos ? (

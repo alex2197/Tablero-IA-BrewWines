@@ -6,6 +6,7 @@ import {
 } from '@/lib/limite';
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
+  reglas,
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
   inventarioPorBodega, clientesDormidos, retencionMensual, resumenClientes,
   metricasCxC, forecast, alertas, contexto,
@@ -18,7 +19,10 @@ const claude = new Anthropic();
 const MODELO = 'claude-sonnet-5';
 const MAX_VUELTAS = 3;
 
-function sistema(ctx: Awaited<ReturnType<typeof contexto>>) {
+function sistema(
+  ctx: Awaited<ReturnType<typeof contexto>>,
+  rg: Awaited<ReturnType<typeof reglas>>
+) {
   return `Eres el analista de datos de ${ctx.empresa}, una distribuidora de vinos en México.
 Hablas con el dueño o un gerente. No son técnicos.
 
@@ -29,9 +33,21 @@ DATOS DISPONIBLES
   no contra la fecha real, y acláralo en una frase corta.
 - El último mes cargado puede estar incompleto. Si lo usas para comparar, adviértelo.
 - Canales: ${ctx.canales.join(', ')}.
+${rg.umbralMarketing != null ? `
+REGLA DE NEGOCIO ACTIVA
+- Las líneas de venta con precio unitario menor a $${rg.umbralMarketing} NO cuentan como ingreso.
+  Su monto se registra como "marketing". Todas las cifras de venta, margen, unidades y
+  clientes ya excluyen esas líneas. Es un criterio que pidió el propio negocio, no un error.
+- Si preguntan por marketing, es esa partida. No es inversión publicitaria: es producto
+  entregado a precio bajo o simbólico. No calcules un ROI con ese número.
+` : ''}
 - Categorías: ${ctx.categorias.slice(0, 12).join(', ')}.
 - Pestañas del tablero: Ventas General, Canales, Productos, Productividad,
-  Retención, Operativos, Forecast y Alertas.
+  Retención, Operativos, Forecast, Alertas y Criterios.
+- La pestaña Criterios explica cómo se calcula cada cosa, qué reglas definió el
+  negocio y qué puntos siguen sin definirse. Si preguntan por qué una cifra se
+  calcula de cierta forma, o por qué no coincide con su reporte anterior,
+  llévalos ahí con actualizar_tablero(vista="criterios").
 
 DIFERENCIAS CON EL POWER BI ANTERIOR (menciónalas si el usuario compara cifras)
 - Retención: antes era activos/catálogo (penetración). Ahora es recompra real mes a mes.
@@ -131,6 +147,7 @@ export async function POST(req: Request) {
   }
 
   const ctx = await contexto();
+  const rg = await reglas();
   const codificador = new TextEncoder();
 
   // Fuera del stream para que `cancel` también los vea.
@@ -157,7 +174,7 @@ export async function POST(req: Request) {
             // El caché ahorra bastante: system y tools se repiten en cada vuelta.
             system: [{
               type: 'text',
-              text: sistema(ctx),
+              text: sistema(ctx, rg),
               cache_control: { type: 'ephemeral' },
             }],
             tools: HERRAMIENTAS,

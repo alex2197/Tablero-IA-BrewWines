@@ -157,10 +157,11 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
         vista: {
           type: 'string',
           enum: ['ventas', 'canales', 'productos', 'productividad',
-                 'retencion', 'operativos', 'forecast', 'alertas'],
+                 'retencion', 'operativos', 'forecast', 'alertas', 'criterios'],
           description: 'Pestaña a mostrar. ventas=resumen general, canales=CDMX/Cancún/etc, ' +
             'productos=SKUs y categorías, productividad=clientes y vendedores, ' +
-            'retencion=recompra y churn, operativos=cobranza e inventario, forecast=proyección',
+            'retencion=recompra y churn, operativos=cobranza e inventario, forecast=proyección, ' +
+            'criterios=cómo se calcula cada cosa y qué reglas definió el negocio',
         },
         canal: { type: 'string', description: 'Filtro de canal' },
         categoria: { type: 'string', description: 'Filtro de categoría de producto' },

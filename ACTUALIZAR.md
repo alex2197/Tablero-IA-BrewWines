@@ -1,71 +1,62 @@
-# Ajuste — una sola cifra para el cliente
+# Ajuste — pestaña de Criterios
 
-## El problema
+Una bitácora dentro del tablero con las reglas del negocio, lo que se corrigió y
+lo que sigue abierto. Visible para el cliente, sin necesidad de mandarle un
+documento aparte.
 
-Había dos límites y dos números que podían contradecirse: el chat bloqueado
-mientras el pie decía *"8 de 20 consultas"*. Al cliente le parecía un error.
+## Tres bloques
 
-## La solución
+### Reglas del negocio
+Lo que ellos definieron, citado en sus propias palabras, con lo que hace el
+tablero hoy:
 
-**El presupuesto de tokens se traduce a consultas**, y se muestra siempre el menor
-de los dos. Una sola cifra, imposible de contradecir.
+- Ventas bajo $190 como marketing
+- Moroso cuenta como activo, suspendido no
+- Las casas vinícolas son la categoría
+- Se muestra el nombre comercial
+- Los conceptos de venta se mantienen como vendedores
 
-```
-TE QUEDAN 12 CONSULTAS              de 20
-████████░░░░░░░░░░░░
-Se reinicia a medianoche
-```
+### Correcciones
+Diferencias con el reporte anterior, para cuando una cifra no coincida:
 
-Al agotarse:
+- La retención medía penetración de catálogo
+- El pronóstico no proyectaba meses futuros
+- El inventario se filtraba por una lista de cantidades
+- La cobranza no respondía a los filtros
+- Los almacenes se veían como números
 
-```
-SIN CONSULTAS DISPONIBLES
-████████████████████
-Alcanzaste tu límite de hoy · se reinicia a medianoche
-```
+### Por definir
+Puntos abiertos, con la nota de que mientras tanto se muestra el dato completo:
 
-Nunca se menciona cuál de los dos topes se alcanzó. Para el cliente da igual.
+- Conceptos que no son venta de vino
+- Saldos negativos en cobranza
+- Almacenes de tránsito, proceso y merma
+- Facturas de venta sin registro en cobranza
+- La factura grande con margen anómalo
+- Zona real de los vendedores
 
-## La conversión
+## Las cifras se calculan solas
 
-Se usa el promedio real de tokens por consulta **de ese cliente**, calculado sobre
-su histórico. Mientras haya menos de 5 consultas registradas se asume un valor
-conservador (25,000 tokens), para no prometer más consultas de las que caben.
+Nada está escrito a mano. Cada criterio consulta la base al abrirse, así que si
+los datos cambian el texto se actualiza. Por ejemplo, el criterio de clientes
+muestra cuántos hay de cada estatus y cuántos de ellos compraron de verdad.
 
-En cuanto hay uso real, el número se afina solo.
+Si un punto abierto se resuelve —por ejemplo, si dejan de existir saldos
+negativos— la tarjeta desaparece sola.
 
-### El efecto secundario que vale la pena
+## El asistente la conoce
 
-Si el cliente hace una pregunta muy pesada, el contador puede bajar de 12 a 9 en
-lugar de a 11. Eso es intuitivo — *"esa pregunta me costó tres"* — y le enseña sin
-explicarle que las consultas complejas consumen más.
+Si preguntan *"¿por qué esta cifra no cuadra con mi reporte anterior?"* o
+*"¿cómo calculas el margen?"*, el chat los lleva a esa pestaña.
 
-### Ejemplos
+## Por qué conviene tenerla
 
-| Quedan por conteo | Alcanza el presupuesto para | Muestra |
-|---|---|---|
-| 12 | 18 | **12** |
-| 12 | 3 | **3** |
-| 12 | 0 | **0**, bloqueado |
+Un tablero que explica sus propios criterios se defiende solo. Cuando alguien del
+equipo cuestione un número en una junta, la respuesta está ahí y no depende de
+que tú estés presente.
 
-## Tu vista no cambia
-
-```cmd
-npm run limite
-```
-
-```
-Cliente        Ve el cliente  Consultas   Tokens hoy   Tope tok.   Gasto hoy  Presup.
-Brew Wines           12 de 20       8/20      198,432     522,466       $9.49      $25
-  promedio observado: 24,804 tokens por consulta
-```
-
-La primera columna es exactamente lo que ve el cliente. El resto es tu desglose:
-consultas reales, tokens, tope y gasto en pesos.
-
-Ahí también ves el **promedio observado**, que es el número que usa la conversión.
-Si es muy distinto a 25,000, ya tienes datos suficientes para ajustar el
-presupuesto con criterio.
+Y los puntos abiertos funcionan como recordatorio permanente: cada vez que
+alguien entra, ve lo que falta definir.
 
 ## Pasos
 
@@ -73,7 +64,7 @@ presupuesto con criterio.
 npm install
 npm run build
 git add .
-git commit -m "Una sola cifra de consultas disponibles"
+git commit -m "Pestana de criterios"
 git push
 ```
 

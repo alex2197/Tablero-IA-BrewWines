@@ -95,7 +95,10 @@ export const DIMENSIONES = {
   producto:  { sql: 'p.descripcion', nombre: 'Producto' },
   categoria: { sql: 'p.categoria', nombre: 'Categoría' },
   linea:     { sql: 'p.linea', nombre: 'Línea' },
-  bodega:    { sql: `'Bodega ' || COALESCE(v.bodega::text, 's/d')`, nombre: 'Bodega' },
+  bodega:    { sql: `COALESCE(alm.nombre,
+                              CASE WHEN v.bodega IS NULL THEN 'Sin almacén'
+                                   ELSE 'ALM-' || LPAD(v.bodega::text, 2, '0') END)`,
+               nombre: 'Almacén' },
   mes:       { sql: `TO_CHAR(v.fecha, 'YYYY-MM')`, nombre: 'Mes' },
   dia:       { sql: `TO_CHAR(v.fecha, 'YYYY-MM-DD')`, nombre: 'Día' },
   trimestre: { sql: `TO_CHAR(v.fecha, 'YYYY') || '-Q' || EXTRACT(QUARTER FROM v.fecha)::text`, nombre: 'Trimestre' },

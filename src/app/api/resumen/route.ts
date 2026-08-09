@@ -3,7 +3,7 @@ import { consumir, COSTO, registrarTokens, acumular, CONSUMO_CERO } from '@/lib/
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
 import {
   consultar, metricasCxC, resumenInventario, resumenClientes,
-  retencionMensual, forecast, alertas, contexto, cartera, type Filtros,
+  retencionMensual, forecast, alertas, contexto, cartera, reglas, type Filtros,
 } from '@/lib/consultar';
 
 export const runtime = 'nodejs';
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     }
 
     const ctx = await contexto();
+    const rg = await reglas();
     const M = ['venta_neta', 'costo_total', 'margen_bruto', 'margen_pct',
       'unidades', 'facturas', 'clientes_activos', 'ticket_promedio'];
 
@@ -90,6 +91,10 @@ REGLAS
 - Español mexicano, directo, sin relleno ni frases de cortesía.
 - Cifras en pesos con formato $1,234,567.
 - El último mes del periodo puede estar incompleto: si lo mencionas, acláralo.
+${rg.umbralMarketing != null
+  ? `- Las ventas con precio unitario menor a $${rg.umbralMarketing} se registran como marketing por
+  criterio del negocio y no cuentan como ingreso. No lo señales como error.`
+  : ''}
 - Si algo requiere una decisión, dilo con un verbo de acción, no con sugerencias vagas.
 
 FORMATO exacto, sin desviarte:

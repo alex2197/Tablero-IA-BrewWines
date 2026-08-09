@@ -114,10 +114,10 @@ export function VistaProductos({ d }: { d: D }) {
       </Tarjeta>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Tarjeta id="categoria" titulo="Ventas por línea" sub="participación">
+        <Tarjeta id="categoria" titulo="Ventas por marca" sub="participación">
           <Mapa datos={rank(d.porCat ?? [])} />
         </Tarjeta>
-        <Tarjeta id="bodega" titulo="Ventas por bodega de salida" sub="distribución">
+        <Tarjeta id="bodega" titulo="Ventas por almacén de salida" sub="distribución">
           <Dona datos={rank(d.porBodega ?? [])} />
         </Tarjeta>
       </div>
@@ -304,7 +304,7 @@ export function VistaOperativos({ d }: { d: D }) {
           <Barras datos={(d.deudores ?? []).map((x: D) => ({ etiqueta: x.cliente, valor: x.saldo }))}
             color={T.rojo} ancho={196} />
         </Tarjeta>
-        <Tarjeta id="bodegas" titulo="Unidades disponibles por bodega" sub="inventario">
+        <Tarjeta id="bodegas" titulo="Unidades disponibles por almacén" sub="inventario">
           <Barras datos={(d.bodegas ?? []).map((x: D) => ({ etiqueta: x.bodega, valor: x.unidades }))}
             tipo="entero" color={T.tierra} ancho={146} />
         </Tarjeta>
@@ -333,7 +333,8 @@ export function VistaForecast({ d }: { d: D }) {
   const fc = d.fc ?? { puntos: [], r2: 0, pendiente: 0, metodo: '' };
   const puntos: D[] = fc.puntos ?? [];
   const proy = puntos.filter(p => p.proyectado);
-  const recla = d.recla ?? { filas: [], monto: 0, concepto: '' };
+  const mkt = d.mkt ?? { activa: false, umbral: null, filas: [], monto: 0, desglose: null };
+  const muestreo = d.muestreo ?? { filas: [], costo: 0, botellas: 0, umbral: 5 };
   const margenBruto = num(d.kpis?.margen_bruto);
   const pend = num(fc.pendiente);
 
@@ -362,9 +363,9 @@ export function VistaForecast({ d }: { d: D }) {
             con banda de confianza sobre el error histórico.
           </li>
           <li>
-            · <strong>Margen neto y ROI de marketing.</strong> Se retiraron. Dependían de una tabla
-            llamada &ldquo;Marketing&rdquo; que en realidad agrupa ventas menores a $190, no gasto
-            publicitario. Un ROI calculado sobre eso no es interpretable.
+            · <strong>ROI de marketing.</strong> Se retiró. Dividía los ingresos entre la partida de
+            marketing, que no es inversión publicitaria sino producto entregado. El cociente sale,
+            pero no es interpretable como retorno.
           </li>
         </ul>
       </div>
@@ -399,22 +400,40 @@ export function VistaForecast({ d }: { d: D }) {
           }))} />
         </Tarjeta>
 
-        <Tarjeta id="reclasificadas" titulo="Ventas reclasificadas" sub={recla.concepto}>
-          <Columnas alto={210}
-            datos={(recla.filas ?? []).map((m: D) => ({ etiqueta: m.periodo, monto: m.monto }))}
-            series={[{ key: 'monto', nombre: 'Monto', color: T.pizarra }]} />
+        <Tarjeta id="muestreo"
+          titulo={mkt.activa ? 'Marketing' : 'Costo de muestreo comercial'}
+          sub={mkt.activa
+            ? `ventas bajo $${mkt.umbral} de precio unitario`
+            : `producto entregado a $${muestreo.umbral} o menos`}>
+
+          {mkt.activa ? (
+            <Columnas alto={200}
+              datos={(mkt.filas ?? []).map((m: D) => ({ etiqueta: m.periodo, monto: m.monto }))}
+              series={[{ key: 'monto', nombre: 'Monto', color: T.arena }]} />
+          ) : (
+            <Columnas alto={200}
+              datos={(muestreo.filas ?? []).map((m: D) => ({ etiqueta: m.periodo, costo: m.costo }))}
+              series={[{ key: 'costo', nombre: 'Costo', color: T.arena }]} />
+          )}
+
           <div className="mt-3 pt-3 border-t text-[12px] leading-relaxed"
             style={{ borderColor: T.linea, color: T.humo }}>
-            <strong style={{ color: T.vino }}>Dato sin verificar.</strong> En el Power BI esta
-            tabla se llamaba &ldquo;Marketing&rdquo; y alimentaba el margen neto y el ROI. El
-            criterio real es agrupar ventas menores a $190, así que no representa inversión
-            publicitaria. Se muestra como referencia, no se usa en ningún cálculo.
-            {recla.filas?.length > 0 && (
-              <span className="block mt-2">
-                Julio salta a {mxn(num(recla.filas[recla.filas.length - 1]?.monto))} contra
-                un promedio previo mucho menor, y solo tiene 17 días de datos. Vale la pena
-                confirmar el criterio con quien lo capturó.
-              </span>
+            {mkt.activa ? (
+              <>
+                <strong style={{ color: T.vino }}>Regla activa.</strong> Las líneas con precio
+                unitario menor a ${mkt.umbral} no cuentan como ingreso; su monto se registra aquí.
+              </>
+            ) : (
+              <>
+                <strong style={{ color: T.vino }}>{mxn(num(muestreo.costo))}</strong> en{' '}
+                {entero(num(muestreo.botellas))} botellas entregadas como cortesía.
+                Se mide el <strong>costo</strong> del producto, no su precio de lista, porque es
+                lo que realmente sale del bolsillo.
+                <span className="block mt-2">
+                  El reporte anterior sumaba aquí el precio de venta de todo lo que saliera bajo
+                  $190, lo que además incluía ventas de vino económico a precio normal.
+                </span>
+              </>
             )}
           </div>
         </Tarjeta>

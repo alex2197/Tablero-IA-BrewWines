@@ -13,7 +13,10 @@ CREATE TABLE tenants (
   --   UPDATE tenants SET limite_ia_diario = 100 WHERE id = 'brewwines';
   limite_ia_diario INTEGER DEFAULT 50,
   -- Tope opcional de tokens por día. NULL = sin tope de tokens.
-  tokens_dia_max BIGINT
+  tokens_dia_max BIGINT,
+  -- Interruptor opcional. Si se define, las líneas con precio unitario por
+  -- debajo dejan de contar como ingreso. NULL = todas las ventas cuentan.
+  umbral_marketing NUMERIC(14,2)
 );
 
 -- Contador diario de uso de IA. Se reinicia solo al cambiar de fecha.
@@ -69,9 +72,69 @@ CREATE TABLE inventario (
   existencias    INTEGER DEFAULT 0,
   costo          NUMERIC(14,4),
   linea          TEXT,
+  -- Posición en el rack (A06-01), no el almacén. Ver inventario_almacen.
   lugar          TEXT,
   PRIMARY KEY (tenant_id, producto_clave)
 );
+
+-- Existencias desglosadas por almacén (columnas ALM-01 a ALM-15 del Excel).
+CREATE TABLE inventario_almacen (
+  tenant_id      TEXT NOT NULL REFERENCES tenants(id),
+  producto_clave TEXT NOT NULL,
+  almacen        TEXT NOT NULL,
+  existencias    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, producto_clave, almacen)
+);
+
+CREATE INDEX idx_inv_alm ON inventario_almacen(tenant_id, almacen);
+
+-- Catálogo de almacenes: ALM-08 -> "Almex".
+-- Los nombres vienen de la segunda fila de encabezados del Excel de inventario.
+CREATE TABLE almacenes (
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  codigo    TEXT NOT NULL,
+  nombre    TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, codigo)
+);
+
+CREATE TABLE ventas (
+  id              BIGSERIAL PRIMARY KEY,
+  tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+  fecha           DATE NOT NULL,
+  factura         TEXT NOT NULL,
+  cliente_clave   INTEGER,
+  vendedor_clave  INTEGER,
+  canal           TEXT,
+  producto_clave  TEXT,
+  unidades        INTEGER,
+  precio_unitario NUMERIC(14,4),
+  monto_total     NUMERIC(14,2),
+  costo_unitario  NUMERIC(14,4),
+  bodega          INTEGER,
+  impuestos       NUMERIC(14,2)
+);
+
+CREATE TABLE cuentas_por_cobrar (
+  tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+  factura         TEXT NOT NULL,
+  fecha_factura   DATE,
+  fecha_vence     DATE,
+  monto_facturado NUMERIC(14,2),
+  monto_cobrado   NUMERIC(14,2),
+  saldo_pendiente NUMERIC(14,2),
+  fecha_pago      DATE,
+  cliente_clave   INTEGER,
+  PRIMARY KEY (tenant_id, factura)
+);
+
+CREATE INDEX idx_ventas_tenant_fecha ON ventas(tenant_id, fecha);
+CREATE INDEX idx_ventas_canal        ON ventas(tenant_id, canal);
+CREATE INDEX idx_ventas_cliente      ON ventas(tenant_id, cliente_clave);
+CREATE INDEX idx_ventas_vendedor     ON ventas(tenant_id, vendedor_clave);
+CREATE INDEX idx_ventas_producto     ON ventas(tenant_id, producto_clave);
+CREATE INDEX idx_ventas_factura      ON ventas(tenant_id, factura);
+CREATE INDEX idx_cxc_vence           ON cuentas_por_cobrar(tenant_id, fecha_vence);
+CREATE INDEX idx_cxc_saldo           ON cuentas_por_cobrar(tenant_id, saldo_pendiente);
 
 CREATE TABLE ventas (
   id              BIGSERIAL PRIMARY KEY,
