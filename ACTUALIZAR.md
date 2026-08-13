@@ -1,72 +1,57 @@
-# Nueva pestaña: Pulso
+# Ajuste — Pulso sin filtros
 
-Pantalla de entrada para dirección. **No se tocó ninguna de las pestañas
-existentes** — todos sus cálculos y gráficas quedan igual.
+Los slicers de mes y categoría se ocultan cuando la vista activa es Pulso.
 
-## Qué hace
+## Por qué
 
-Responde en dos minutos las tres preguntas con las que se levanta un director:
-¿vamos bien o mal?, ¿qué se está rompiendo?, ¿dónde está atorado el dinero?
+**La razón de fondo es que el dato no existe.**
 
-### Cuatro números, no doce
+La tabla de inventario no tiene columna de fecha: es una fotografía del día, no
+una serie histórica. La cartera es igual — `saldo_pendiente` refleja lo que deben
+hoy, no lo que debían en junio.
 
-Venta del mes, margen bruto, días de cartera y meses de inventario. Cada uno con
-su comparación y una barra de estado en verde, ámbar o rojo.
+Si Pulso aceptara un filtro de mes:
 
-Un número solo no informa. "12% arriba del mes anterior" ya es una decisión.
-
-### Hallazgos ordenados por impacto en pesos
-
-Es la diferencia entre un tablero que se usa y uno que se abandona: **quién
-empieza la conversación**. Aquí el tablero habla primero.
-
-Se calculan seis tipos de hallazgo y solo aparecen si existen:
-
-| Hallazgo | Qué detecta |
+| Indicador | Qué pasaría |
 |---|---|
-| Venta en fuga | Clientes que cayeron más de 30% comparando el primer tercio del periodo contra el último |
-| Inventario excedente | Productos con más de 12 meses de cobertura |
-| Concentración | Cuántos clientes generan el 80% de la venta |
-| Factura anómala | Ventas grandes con margen fuera de rango |
-| Cumplimiento de pago | Porcentaje que paga dentro del plazo pactado |
-| Dispersión de precio | Mismo producto vendido con más de 40% de variación |
+| Venta del mes | Cambia correctamente |
+| Margen bruto | Cambia correctamente |
+| Días de cartera | Mezclaría un saldo de hoy con ventas de junio |
+| Meses de inventario | **Imposible.** No hay inventario histórico |
 
-Cada uno lleva la lista de casos concretos, con nombre, cifra y vendedor
-asignado. **De la alerta a la acción en un clic.**
+Dos de los cuatro indicadores no pueden filtrarse, y no por decisión de diseño
+sino porque no existe el dato. Un control que mueve la mitad de los números y
+deja la otra mitad quieta confunde más que ayudar.
 
-Si no hay desviaciones, lo dice. Eso también es información.
+A eso se suma que los hallazgos de tendencia —clientes en caída, concentración,
+cumplimiento de pago— comparan el primer tercio del periodo contra el último.
+Filtrados a un mes no se vuelven más precisos: se rompen.
 
-### Trayectoria
+## Qué cambia en pantalla
 
-Una sola gráfica: venta mensual con la proyección punteada hacia adelante. El mes
-en curso se excluye del ajuste para no sesgar la recta, y se avisa cuántos días
-lleva.
+En Pulso, en lugar de los slicers aparece una línea discreta:
 
-## Ocho métricas nuevas, cero datos nuevos
+> *panorama del periodo completo · usa las otras pestañas para filtrar*
 
-Índice de concentración, clientes en caída, meses de cobertura por producto,
-cobertura global de inventario, días de cartera, cumplimiento de plazo,
-dispersión de precio y detección de facturas anómalas.
+Los filtros no se pierden: si estabas viendo Cancún en Canales, pasas a Pulso y
+regresas, el filtro sigue puesto. Solo se ocultan mientras estás en la vista que
+no los usa.
 
-Todas salen de los archivos que ya se cargan.
+El enlace de **exportar pdf** desde Pulso genera el reporte sin filtros, para que
+coincida con lo que se está viendo.
 
-## Cómo se conectó
+## El asistente también lo sabe
 
-- **El chat** tiene `consultar_pulso`. Preguntas abiertas como *"¿cómo va el
-  negocio?"* o *"¿qué debo revisar?"* ahora traen el panorama completo en lugar
-  de una cifra suelta
-- **El PDF** abre con una sección de Hallazgos prioritarios, después del resumen
-  ejecutivo
-- **El resumen escrito** da prioridad a esos hallazgos al redactar
+Si preguntan *"¿cómo va Cancún?"* o *"¿y en junio?"*, el chat ya no lleva a Pulso:
+va a la pestaña que corresponda con el filtro aplicado.
 
-## Qué cambió del orden
+## Un efecto secundario que me gusta
 
-Pulso es la **primera pestaña** y la que abre por defecto. Las demás quedan en el
-mismo orden.
+Al entrar al tablero, lo primero que se ve es una pantalla **sin controles**. No
+hay nada que configurar ni que decidir: solo el estado del negocio.
 
-Si prefieres que abra en Ventas General, es una línea en `src/store/estado.ts`:
-mover `['pulso', 'Pulso']` al final del arreglo `VISTAS` y cambiar el valor
-inicial de `vista`.
+La exploración empieza en la segunda pestaña, cuando el director ya sabe qué
+buscar.
 
 ## Pasos
 
@@ -74,31 +59,8 @@ inicial de `vista`.
 npm install
 npm run build
 git add .
-git commit -m "Pestana Pulso para direccion"
+git commit -m "Pulso sin filtros"
 git push
 ```
 
-Sin migración. Ningún dato nuevo, ningún cambio de esquema.
-
-### Para probar
-
-1. Abre el tablero: debe entrar directo a Pulso
-2. Revisa que los cuatro indicadores tengan números coherentes
-3. Abre el detalle de un hallazgo y usa el enlace de la derecha
-4. Pregúntale al chat *"¿cómo va el negocio?"*
-5. Genera el PDF y verifica la sección de Hallazgos
-
-## Qué esperar con los datos de Brew Wines
-
-Validé la lógica contra los Excel. Deberías ver algo así:
-
-- **8 clientes en caída** con $1.2M de venta en riesgo
-- **$17.2M en inventario** con más de un año de cobertura, el 74% del total
-- **16 de 280 clientes** generan el 80% de la venta; el primero concentra 44.7%
-- **42% de cumplimiento de pago**: plazo de 60 días, mediana real de 56, promedio
-  de 152
-- **10.7 meses** de cobertura global de inventario
-- **127 días** de cartera
-
-Ninguno de esos números aparece hoy en ninguna parte del tablero ni del reporte
-anterior.
+Sin migración.

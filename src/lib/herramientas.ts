@@ -169,7 +169,8 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
           type: 'string',
           enum: ['pulso', 'ventas', 'canales', 'productos', 'productividad',
                  'retencion', 'operativos', 'forecast', 'alertas', 'criterios'],
-          description: 'Pestaña a mostrar. pulso=panorama con los hallazgos principales, ' +
+          description: 'Pestaña a mostrar. pulso=panorama del periodo completo, NO acepta ' +
+            'filtros (si piden algo filtrado usa otra pestaña), ' +
             'ventas=resumen general, canales=CDMX/Cancún/etc, ' +
             'productos=SKUs y categorías, productividad=clientes y vendedores, ' +
             'retencion=recompra y churn, operativos=cobranza e inventario, forecast=proyección, ' +

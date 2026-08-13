@@ -64,6 +64,14 @@ export default function Tablero() {
 
   const empresa = process.env.NEXT_PUBLIC_EMPRESA ?? ctx?.empresa ?? 'Tablero';
 
+  /**
+   * Pulso responde "¿cómo va el negocio?", una pregunta que no tiene versión
+   * filtrada. Además, inventario y cartera son fotografías del día —no hay
+   * historia— y sus hallazgos de tendencia necesitan el periodo completo.
+   * Mostrar los slicers ahí sería ofrecer un control que no puede funcionar.
+   */
+  const sinFiltros = vista === 'pulso';
+
   // Si la prueba venció con la sesión abierta, se corta aquí.
   if (acceso && !acceso.permitido) {
     return (
@@ -116,7 +124,7 @@ export default function Tablero() {
             <h1 className="font-display text-xl font-extrabold tracking-tight">{empresa}</h1>
             <span className="etiqueta">Distribución de vinos</span>
             <span className="etiqueta ml-auto">{ctx?.hasta ? `corte ${ctx.hasta}` : ''}</span>
-            <a href={`/reporte?${new URLSearchParams({
+            <a href={`/reporte?${new URLSearchParams(sinFiltros ? {} : {
               ...(canal ? { canal } : {}), ...(categoria ? { categoria } : {}),
               ...(vendedor ? { vendedor } : {}), ...(cliente ? { cliente } : {}),
               ...(meses.length ? { meses: meses.join(',') } : {}),
@@ -129,6 +137,7 @@ export default function Tablero() {
           </div>
 
           {/* Slicers: mes y categoría, como en el Power BI */}
+          {!sinFiltros && (
           <div className="flex gap-2 items-center mt-3 flex-wrap">
             <span className="etiqueta">Mes</span>
             {(ctx?.meses ?? []).map((m: string) => (
@@ -154,8 +163,10 @@ export default function Tablero() {
               {(ctx?.categorias ?? []).map((c: string) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+          )}
 
           {/* Rastro: cada acción deja huella reversible */}
+          {!sinFiltros && (
           <div className="flex gap-1.5 flex-wrap items-center mt-2.5 min-h-[26px]">
             {datos?.rg?.umbralMarketing != null && (
               <span className="inline-flex items-center gap-1.5 bg-white border px-2 py-0.5 font-mono text-[10.5px]"
@@ -179,6 +190,13 @@ export default function Tablero() {
               </span>
             ))}
           </div>
+          )}
+
+          {sinFiltros && (
+            <p className="etiqueta mt-3">
+              panorama del periodo completo · usa las otras pestañas para filtrar
+            </p>
+          )}
 
           {/* Pestañas */}
           <nav className="flex gap-0.5 mt-3 overflow-x-auto scroll-suave">
