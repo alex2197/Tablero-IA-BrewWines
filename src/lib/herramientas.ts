@@ -88,6 +88,17 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'consultar_pulso',
+    description:
+      'Estado general del negocio con los hallazgos que requieren atención: clientes que ' +
+      'bajaron su compra, inventario con exceso de cobertura, concentración de clientes, ' +
+      'cumplimiento de pago y dispersión de precios. ' +
+      'Úsala para preguntas abiertas: "¿cómo va el negocio?", "¿qué debo revisar?", ' +
+      '"dame un panorama", "¿hay algo urgente?", "resumen ejecutivo". ' +
+      'Es la respuesta más completa cuando no preguntan por algo específico.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'consultar_alertas',
     description:
       'Anomalías detectadas automáticamente: facturas grandes con margen anormal, cartera crítica, ' +
@@ -156,9 +167,10 @@ export const HERRAMIENTAS: Anthropic.Tool[] = [
       properties: {
         vista: {
           type: 'string',
-          enum: ['ventas', 'canales', 'productos', 'productividad',
+          enum: ['pulso', 'ventas', 'canales', 'productos', 'productividad',
                  'retencion', 'operativos', 'forecast', 'alertas', 'criterios'],
-          description: 'Pestaña a mostrar. ventas=resumen general, canales=CDMX/Cancún/etc, ' +
+          description: 'Pestaña a mostrar. pulso=panorama con los hallazgos principales, ' +
+            'ventas=resumen general, canales=CDMX/Cancún/etc, ' +
             'productos=SKUs y categorías, productividad=clientes y vendedores, ' +
             'retencion=recompra y churn, operativos=cobranza e inventario, forecast=proyección, ' +
             'criterios=cómo se calcula cada cosa y qué reglas definió el negocio',

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { consumir, COSTO, registrarTokens, acumular, CONSUMO_CERO } from '@/lib/limite';
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
+import { pulsoResumen } from '@/lib/pulso';
 import {
   consultar, metricasCxC, resumenInventario, resumenClientes,
   retencionMensual, forecast, alertas, contexto, cartera, reglas, type Filtros,
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     const M = ['venta_neta', 'costo_total', 'margen_bruto', 'margen_pct',
       'unidades', 'facturas', 'clientes_activos', 'ticket_promedio'];
 
-    const [kpis, porCanal, porMes, topProd, topVend, cxc, inv, cli, ret, fc, alr, deudores] =
+    const [kpis, porCanal, porMes, topProd, topVend, cxc, inv, cli, ret, fc, alr, deudores, plso] =
       await Promise.all([
         consultar({ metricas: M, filtros: f }),
         consultar({ metricas: ['venta_neta', 'margen_pct'], agrupar: 'canal', filtros: f, limite: 8 }),
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
         consultar({ metricas: ['venta_neta', 'margen_pct'], agrupar: 'vendedor', filtros: f, limite: 5 }),
         metricasCxC(f), resumenInventario(), resumenClientes(f),
         retencionMensual(), forecast(3), alertas(), cartera({ diasMinimos: 90, limite: 5 }),
+        pulsoResumen(),
       ]);
 
     const ultRet = ret.filter(r => r.retencion_pct != null).slice(-1)[0];
@@ -78,6 +80,7 @@ export async function POST(req: Request) {
           .map(p => ({ mes: p.mes, estimado: Math.round(p.tendencia) })),
       },
       alertas: alr.map(a => ({ severidad: a.severidad, titulo: a.titulo })),
+      hallazgos_prioritarios: plso.hallazgos,
     };
 
     const r = await claude.messages.create({
@@ -106,6 +109,7 @@ Tres viñetas, cada una con su cifra.
 
 ## Lo que requiere atención
 Tres viñetas, cada una con su cifra y por qué importa.
+Da prioridad a hallazgos_prioritarios: están ordenados por impacto en pesos.
 
 ## Qué hacer
 Tres acciones concretas, en orden de urgencia. Una línea cada una.`,

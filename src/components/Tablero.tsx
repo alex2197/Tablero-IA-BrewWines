@@ -4,6 +4,7 @@ import { useEstado, VISTAS, type Vista } from '@/store/estado';
 import Chat from './Chat';
 import VistaAlertas from './VistaAlertas';
 import VistaCriterios from './VistaCriterios';
+import VistaPulso from './VistaPulso';
 import { T } from '@/lib/tema';
 import { nombreMes } from '@/lib/formato';
 import {
@@ -36,7 +37,9 @@ export default function Tablero() {
 
   useEffect(() => {
     // Estas vistas traen sus propios datos
-    if (vista === 'alertas' || vista === 'criterios') { setCargando(false); return; }
+    if (vista === 'alertas' || vista === 'criterios' || vista === 'pulso') {
+      setCargando(false); return;
+    }
     const ac = new AbortController();
     setCargando(true); setError(null);
 
@@ -200,6 +203,8 @@ export default function Tablero() {
               Revisa DATABASE_URL y que hayas corrido <code className="font-mono">npm run db:cargar</code>.
             </p>
           </div>
+        ) : vista === 'pulso' ? (
+          <VistaPulso />
         ) : vista === 'alertas' ? (
           <VistaAlertas />
         ) : vista === 'criterios' ? (

@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 
 export type Vista =
+  | 'pulso'
   | 'ventas' | 'canales' | 'productos' | 'productividad'
   | 'retencion' | 'operativos' | 'forecast' | 'alertas' | 'criterios';
 
 export const VISTAS: [Vista, string][] = [
+  ['pulso', 'Pulso'],
   ['ventas', 'Ventas General'],
   ['canales', 'Canales'],
   ['productos', 'Productos'],
@@ -49,7 +51,7 @@ interface Estado {
 const nid = () => Math.random().toString(36).slice(2, 9);
 
 export const useEstado = create<Estado>((set) => ({
-  vista: 'ventas',
+  vista: 'pulso',
   canal: null, categoria: null, vendedor: null, cliente: null,
   meses: [], destacar: null, trazas: [],
 

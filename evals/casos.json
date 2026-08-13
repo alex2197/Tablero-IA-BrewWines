@@ -174,5 +174,29 @@
     "espera": [
       "generar_reporte"
     ]
+  },
+  {
+    "pregunta": "¿Cómo va el negocio?",
+    "espera": [
+      "consultar_pulso"
+    ]
+  },
+  {
+    "pregunta": "¿Qué debo revisar hoy?",
+    "espera": [
+      "consultar_pulso"
+    ]
+  },
+  {
+    "pregunta": "Dame un panorama general",
+    "espera": [
+      "consultar_pulso"
+    ]
+  },
+  {
+    "pregunta": "¿Qué clientes bajaron su compra?",
+    "espera": [
+      "consultar_pulso"
+    ]
   }
 ]

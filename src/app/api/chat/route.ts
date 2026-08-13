@@ -5,6 +5,7 @@ import {
   estadoLimite, devolver, type Consumo,
 } from '@/lib/limite';
 import { verificarAcceso, respuestaSinAcceso } from '@/lib/acceso';
+import { pulsoResumen } from '@/lib/pulso';
 import {
   reglas,
   consultar, cartera, carteraAntiguedad, inventarioSinMovimiento,
@@ -42,8 +43,11 @@ REGLA DE NEGOCIO ACTIVA
   entregado a precio bajo o simbólico. No calcules un ROI con ese número.
 ` : ''}
 - Categorías: ${ctx.categorias.slice(0, 12).join(', ')}.
-- Pestañas del tablero: Ventas General, Canales, Productos, Productividad,
+- Pestañas del tablero: Pulso, Ventas General, Canales, Productos, Productividad,
   Retención, Operativos, Forecast, Alertas y Criterios.
+- Pulso es la pantalla de entrada: cuatro indicadores y los hallazgos que requieren
+  atención, ordenados por impacto en pesos. Si la pregunta es general —"¿cómo va el
+  negocio?", "¿qué debo revisar?"— usa consultar_pulso y llévalos ahí.
 - La pestaña Criterios explica cómo se calcula cada cosa, qué reglas definió el
   negocio y qué puntos siguen sin definirse. Si preguntan por qué una cifra se
   calcula de cierta forma, o por qué no coincide con su reporte anterior,
@@ -102,6 +106,8 @@ async function ejecutar(nombre: string, args: Record<string, unknown>) {
       return { productos: await inventarioSinMovimiento(args.limite as number) };
     case 'consultar_clientes_dormidos':
       return { clientes: await clientesDormidos(args.limite as number) };
+    case 'consultar_pulso':
+      return await pulsoResumen();
     case 'consultar_alertas':
       return { alertas: await alertas() };
     case 'consultar_retencion': {

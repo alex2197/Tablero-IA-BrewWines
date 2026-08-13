@@ -88,6 +88,7 @@ function Contenido() {
   };
 
   const [d, setD] = useState<Record<string, D>>({});
+  const [pulso, setPulso] = useState<D | null>(null);
   const [resumen, setResumen] = useState<string | null>(null);
   const [errorIA, setErrorIA] = useState<string | null>(null);
   const [listo, setListo] = useState(false);
@@ -107,6 +108,10 @@ function Contenido() {
       setD(Object.fromEntries(vistas.map((v, i) => [v, res[i]])));
       setListo(true);
     });
+
+    fetch('/api/pulso').then(r => r.json())
+      .then(j => { if (!j.error) setPulso(j); })
+      .catch(() => {});
 
     fetch('/api/resumen', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -186,6 +191,39 @@ function Contenido() {
           Redactado automáticamente a partir de las cifras de este reporte.
         </p>
       </Seccion>
+
+      {/* Hallazgos prioritarios */}
+      {pulso?.hallazgos?.length > 0 && (
+        <Seccion titulo="Hallazgos prioritarios">
+          {pulso.hallazgos.slice(0, 4).map((h: D, i: number) => (
+            <div key={i} className="border px-4 py-3 mb-2.5 evitar-corte"
+              style={{
+                borderColor: T.linea,
+                borderLeft: `3px solid ${i === 0 ? T.rojo : i === 1 ? T.ambar : T.tierra}`,
+              }}>
+              <h3 className="font-display text-[13.5px] font-semibold">{h.titulo}</h3>
+              <p className="text-[12.5px] mt-1 leading-relaxed" style={{ color: '#4A3B38' }}>
+                {h.detalle}
+              </p>
+              {h.filas?.length > 0 && (
+                <ul className="mt-2 space-y-0.5">
+                  {h.filas.slice(0, 4).map((f: D, k: number) => (
+                    <li key={k} className="text-[11.5px] flex justify-between gap-3"
+                      style={{ color: T.humo }}>
+                      <span className="truncate">
+                        {f.nombre}{f.extra ? ` · ${f.extra}` : ''}
+                      </span>
+                      <span className="font-mono num whitespace-nowrap" style={{ color: T.vino }}>
+                        {f.dato}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </Seccion>
+      )}
 
       {/* 1. Ventas */}
       <Seccion titulo="1 · Ventas generales">
