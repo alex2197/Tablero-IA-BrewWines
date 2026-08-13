@@ -122,7 +122,7 @@ function leerNombresAlmacen(buf: Buffer | ArrayBuffer): unknown[][] {
   const vistos = new Set<string>();
 
   codigos.forEach((cod, i) => {
-    const c = txt(cod)?.toUpperCase();
+    const c = txt(cod)?.trim().toUpperCase();
     if (!c || !/^ALM-\d+$/.test(c) || vistos.has(c)) return;
     vistos.add(c);
     // El catálogo conocido va primero porque trae los acentos correctos
@@ -150,10 +150,10 @@ function expandirAlmacenes(filas: Record<string, unknown>[]): unknown[][] {
     const clave = txt(r['Clave de producto']);
     if (!clave) continue;
     for (const col of Object.keys(r)) {
-      if (!/^ALM-\d+$/i.test(col)) continue;
+      if (!/^\s*ALM-\d+\s*$/i.test(col)) continue;
       const cant = num(r[col]);
       if (!cant || cant <= 0) continue;
-      salida.push([clave, col.toUpperCase(), Math.round(cant)]);
+      salida.push([clave, col.trim().toUpperCase(), Math.round(cant)]);
     }
   }
   return salida;
@@ -231,12 +231,43 @@ export const ARCHIVOS: DefArchivo[] = [
 
 /* ------------------------- fase 1: analizar ------------------------- */
 
+/**
+ * Normaliza un encabezado para comparar: sin espacios sobrantes, sin acentos
+ * y en minúsculas. Los Excel del cliente traen columnas como " COSTO " con
+ * espacios alrededor, que no coinciden con el nombre exacto.
+ */
+const normalizarClave = (s: string) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+
+/**
+ * Envuelve una fila para que buscar una columna tolere espacios, acentos y
+ * mayúsculas. Así un cambio cosmético en el Excel no rompe la carga.
+ */
+function filaTolerante(r: Record<string, unknown>): Record<string, unknown> {
+  const mapa = new Map<string, unknown>();
+  for (const [k, v] of Object.entries(r)) mapa.set(normalizarClave(k), v);
+  return new Proxy(r, {
+    get(objetivo, prop) {
+      if (typeof prop !== 'string') return Reflect.get(objetivo, prop);
+      if (prop in objetivo) return objetivo[prop];
+      return mapa.get(normalizarClave(prop));
+    },
+    has(objetivo, prop) {
+      if (typeof prop !== 'string') return Reflect.has(objetivo, prop);
+      return prop in objetivo || mapa.has(normalizarClave(prop));
+    },
+  });
+}
+
 function leerHoja(buf: Buffer | ArrayBuffer, hoja?: string) {
   const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
   const nombre = hoja && wb.Sheets[hoja] ? hoja : wb.SheetNames[0];
   if (!wb.Sheets[nombre]) throw new Error(`No encontré la hoja "${hoja ?? nombre}"`);
+  const crudas = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+    wb.Sheets[nombre], { defval: null }
+  );
   return {
-    filas: XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[nombre], { defval: null }),
+    filas: crudas.map(filaTolerante),
     hojaUsada: nombre,
     hojas: wb.SheetNames,
   };
@@ -279,6 +310,18 @@ export function analizar(archivos: ArchivoEntrada[]): Analisis {
       for (const f of filas) {
         const m = def.mapear(f);
         if (m) validas.push(m);
+      }
+
+      // Columnas numéricas que llegaron todas vacías: casi siempre es un
+      // encabezado que cambió de nombre y hay que avisarlo.
+      if (validas.length > 5) {
+        def.columnas.forEach((nombre, i) => {
+          const col = validas.map(f => f[i]);
+          const numericas = col.filter(v => typeof v === 'number');
+          if (numericas.length === 0 && col.every(v => v === null)) {
+            avisos.push(`La columna "${nombre}" llegó vacía en todas las filas. Revisa que el encabezado del Excel no haya cambiado.`);
+          }
+        });
       }
 
       // Si falla más de la mitad, casi siempre son encabezados distintos.

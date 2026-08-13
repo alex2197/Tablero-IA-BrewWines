@@ -1,57 +1,48 @@
-# Ajuste — Pulso sin filtros
+# Corrección — el valor del inventario salía en cero
 
-Los slicers de mes y categoría se ocultan cuando la vista activa es Pulso.
+## Qué pasaba
 
-## Por qué
+El encabezado de la columna de costo en `Inventario.xlsx` es **`" COSTO "` con
+espacios alrededor**, no `"COSTO"`. El ETL buscaba el nombre exacto, no lo
+encontraba, y cargaba `null` en todas las filas.
 
-**La razón de fondo es que el dato no existe.**
+Las existencias sí cargaban (89,589 botellas). Lo que faltaba era el costo, y sin
+él el valor del inventario daba $0 y los meses de cobertura 0.0.
 
-La tabla de inventario no tiene columna de fecha: es una fotografía del día, no
-una serie histórica. La cartera es igual — `saldo_pendiente` refleja lo que deben
-hoy, no lo que debían en junio.
+## Qué se corrigió
 
-Si Pulso aceptara un filtro de mes:
+**La lectura de encabezados ahora tolera espacios, acentos y mayúsculas.**
 
-| Indicador | Qué pasaría |
-|---|---|
-| Venta del mes | Cambia correctamente |
-| Margen bruto | Cambia correctamente |
-| Días de cartera | Mezclaría un saldo de hoy con ventas de junio |
-| Meses de inventario | **Imposible.** No hay inventario histórico |
+Antes buscaba coincidencia exacta. Ahora `" COSTO "`, `"Costo"` y `"COSTO"` se
+resuelven igual. Aplica a todas las columnas de todos los archivos, así que un
+cambio cosmético en cualquier Excel deja de romper la carga.
 
-Dos de los cuatro indicadores no pueden filtrarse, y no por decisión de diseño
-sino porque no existe el dato. Un control que mueve la mitad de los números y
-deja la otra mitad quieta confunde más que ayudar.
+**Aviso en la validación.** Si una columna numérica llega vacía en todas las
+filas, la pantalla de carga lo señala antes de confirmar:
 
-A eso se suma que los hallazgos de tendencia —clientes en caída, concentración,
-cumplimiento de pago— comparan el primer tercio del periodo contra el último.
-Filtrados a un mes no se vuelven más precisos: se rompen.
+> *La columna "costo" llegó vacía en todas las filas. Revisa que el encabezado
+> del Excel no haya cambiado.*
 
-## Qué cambia en pantalla
+Eso convierte un error silencioso en uno visible.
 
-En Pulso, en lugar de los slicers aparece una línea discreta:
+**Los ceros ya no se muestran como cifra buena.** Si el inventario o la cartera
+vienen en cero, Pulso muestra `—` con la nota *"sin inventario cargado"* en lugar
+de `0.0 meses`. Un cero que parece dato real es peor que decir que falta
+información.
 
-> *panorama del periodo completo · usa las otras pestañas para filtrar*
+## Verificado con tus archivos
 
-Los filtros no se pierden: si estabas viendo Cancún en Canales, pasas a Pulso y
-regresas, el filtro sigue puesto. Solo se ocultan mientras estás en la vista que
-no los usa.
+```
+inventario     400 filas
+  existencias: 89,589
+  valor:       $23,228,673
+  almacenes:   594 registros en 15 almacenes
 
-El enlace de **exportar pdf** desde Pulso genera el reporte sin filtros, para que
-coincida con lo que se está viendo.
+ventas      $29,065,136
+cartera     $16,922,534
+```
 
-## El asistente también lo sabe
-
-Si preguntan *"¿cómo va Cancún?"* o *"¿y en junio?"*, el chat ya no lleva a Pulso:
-va a la pestaña que corresponda con el filtro aplicado.
-
-## Un efecto secundario que me gusta
-
-Al entrar al tablero, lo primero que se ve es una pantalla **sin controles**. No
-hay nada que configurar ni que decidir: solo el estado del negocio.
-
-La exploración empieza en la segunda pestaña, cuando el director ya sabe qué
-buscar.
+Ventas y cobranza no cambiaron: el problema era exclusivo del inventario.
 
 ## Pasos
 
@@ -59,8 +50,21 @@ buscar.
 npm install
 npm run build
 git add .
-git commit -m "Pulso sin filtros"
+git commit -m "Corrige lectura de encabezados con espacios"
 git push
 ```
 
-Sin migración.
+**Después de desplegar, recarga los datos** desde *actualizar datos*. Sin eso el
+costo sigue en null en la base.
+
+### Qué debe cambiar en Pulso
+
+| Ahora | Después |
+|---|---|
+| 0.0 meses · $0 en stock | **10.7 meses · $23,228,673** |
+| 5 hallazgos | **6 hallazgos** |
+
+El hallazgo nuevo es *"$17.2M en inventario con más de un año de cobertura"*, que
+es de los más fuertes que tienes.
+
+Revisa también **Operativos**: el valor de inventario debe salir en $23.2M.

@@ -144,9 +144,11 @@ async function kpis(f: string, t: PuntoTendencia[]): Promise<{ kpis: Kpi[]; dias
     `SELECT COALESCE(SUM(monto_total),0)::float8 AS v,
             (MAX(fecha) - MIN(fecha) + 1)::int AS dias
      FROM ventas WHERE tenant_id = $1${f}`, [TENANT]);
+  const saldoCartera = n(cb[0]?.saldo);
+  const sinCartera = saldoCartera <= 0;
   const diasCartera = n(vd[0]?.v) > 0
-    ? (n(cb[0]?.saldo) / n(vd[0].v)) * n(vd[0].dias) : 0;
-  const pctVencido = n(cb[0]?.saldo) > 0 ? (n(cb[0].vencido) / n(cb[0].saldo)) * 100 : 0;
+    ? (saldoCartera / n(vd[0].v)) * n(vd[0].dias) : 0;
+  const pctVencido = saldoCartera > 0 ? (n(cb[0].vencido) / saldoCartera) * 100 : 0;
 
   // Inventario: meses de cobertura global
   const { rows: iv } = await pool.query(
@@ -161,7 +163,11 @@ async function kpis(f: string, t: PuntoTendencia[]): Promise<{ kpis: Kpi[]; dias
             (MAX(fecha) - MIN(fecha) + 1)::float8 AS dias
      FROM ventas WHERE tenant_id = $1${f}`, [TENANT]);
   const costoMes = n(cs[0]?.dias) > 0 ? n(cs[0].costo) / (n(cs[0].dias) / 30.4) : 0;
-  const mesesInv = costoMes > 0 ? n(iv[0]?.valor) / costoMes : 0;
+  const valorInv = n(iv[0]?.valor);
+  const mesesInv = costoMes > 0 ? valorInv / costoMes : 0;
+  // Un cero puede significar "no hay inventario" o "no se ha cargado".
+  // Mostrarlo como cifra normal induce a error, así que se distingue.
+  const sinInventario = valorInv <= 0;
 
   const varVenta = act && prev && n(prev.venta) > 0
     ? (n(act.venta) / n(prev.venta) - 1) * 100 : null;
@@ -193,18 +199,24 @@ async function kpis(f: string, t: PuntoTendencia[]): Promise<{ kpis: Kpi[]; dias
     {
       clave: 'cobranza',
       etiqueta: 'Días de cartera',
-      valor: `${Math.round(diasCartera)} días`,
-      contexto: `${mxn(n(cb[0]?.saldo))} por cobrar · ${pct(pctVencido)} vencido`,
-      avance: Math.min(100, (diasCartera / 120) * 100),
-      estado: diasCartera <= 45 ? 'bien' : diasCartera <= 75 ? 'atencion' : 'critico',
+      valor: sinCartera ? '—' : `${Math.round(diasCartera)} días`,
+      contexto: sinCartera
+        ? 'sin cartera cargada'
+        : `${mxn(saldoCartera)} por cobrar · ${pct(pctVencido)} vencido`,
+      avance: sinCartera ? 0 : Math.min(100, (diasCartera / 120) * 100),
+      estado: sinCartera ? 'neutro'
+        : diasCartera <= 45 ? 'bien' : diasCartera <= 75 ? 'atencion' : 'critico',
     },
     {
       clave: 'inventario',
       etiqueta: 'Meses de inventario',
-      valor: `${mesesInv.toFixed(1)} meses`,
-      contexto: `${mxn(n(iv[0]?.valor))} en stock`,
-      avance: Math.min(100, (mesesInv / 12) * 100),
-      estado: mesesInv <= 3 ? 'bien' : mesesInv <= 6 ? 'atencion' : 'critico',
+      valor: sinInventario ? '—' : `${mesesInv.toFixed(1)} meses`,
+      contexto: sinInventario
+        ? 'sin inventario cargado'
+        : `${mxn(valorInv)} en stock`,
+      avance: sinInventario ? 0 : Math.min(100, (mesesInv / 12) * 100),
+      estado: sinInventario ? 'neutro'
+        : mesesInv <= 3 ? 'bien' : mesesInv <= 6 ? 'atencion' : 'critico',
     },
   ];
 
