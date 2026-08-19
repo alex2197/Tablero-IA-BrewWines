@@ -1,48 +1,58 @@
-# Corrección — el valor del inventario salía en cero
+# Corrección — el archivo de inventario cambió de estructura
 
-## Qué pasaba
+## Qué pasó
 
-El encabezado de la columna de costo en `Inventario.xlsx` es **`" COSTO "` con
-espacios alrededor**, no `"COSTO"`. El ETL buscaba el nombre exacto, no lo
-encontraba, y cargaba `null` en todas las filas.
+El nuevo `Inventario.xlsx` viene distinto al anterior en cuatro cosas:
 
-Las existencias sí cargaban (89,589 botellas). Lo que faltaba era el costo, y sin
-él el valor del inventario daba $0 y los meses de cobertura 0.0.
+| | Antes | Ahora |
+|---|---|---|
+| Hoja | `INVENTARIO` | `COST_PRICE-GRAL (i)` |
+| Encabezados | fila 1 | **fila 2** (arriba hay una fila de totales) |
+| Columna de clave | `Clave de producto` | `Clave` |
+| Columna de existencias | `Existencias` | `EXISTENCIAS` |
+
+Cada uno por separado rompe la carga. Los cuatro juntos explican el
+*"0 de 402 filas pasaron la validación"*.
 
 ## Qué se corrigió
 
-**La lectura de encabezados ahora tolera espacios, acentos y mayúsculas.**
+En lugar de parchar los cuatro nombres, hice el ETL resistente a este tipo de
+cambios:
 
-Antes buscaba coincidencia exacta. Ahora `" COSTO "`, `"Costo"` y `"COSTO"` se
-resuelven igual. Aplica a todas las columnas de todos los archivos, así que un
-cambio cosmético en cualquier Excel deja de romper la carga.
+**Búsqueda de hoja por fragmento.** Si no encuentra `INVENTARIO`, busca hojas que
+contengan `inventario`, `cost_price` o `existencias` antes de rendirse.
 
-**Aviso en la validación.** Si una columna numérica llega vacía en todas las
-filas, la pantalla de carga lo señala antes de confirmar:
+**Detección de la fila de encabezados.** Ya no asume que es la primera. Busca la
+fila que contenga una columna conocida —en este caso `LINEA`— dentro de las
+primeras doce. Si el archivo trae totales, títulos o filas en blanco arriba, los
+salta solo.
 
-> *La columna "costo" llegó vacía en todas las filas. Revisa que el encabezado
-> del Excel no haya cambiado.*
+**Nombres de columna alternativos.** `Clave de producto` o `Clave`. `Existencias`
+o `EXISTENCIAS` o, como respaldo, `SUMA`.
 
-Eso convierte un error silencioso en uno visible.
+Sumado a la tolerancia de espacios y acentos que ya tenía, ahora aguanta la
+mayoría de los cambios cosméticos sin tocar código.
 
-**Los ceros ya no se muestran como cifra buena.** Si el inventario o la cartera
-vienen en cero, Pulso muestra `—` con la nota *"sin inventario cargado"* en lugar
-de `0.0 meses`. Un cero que parece dato real es peor que decir que falta
-información.
+**Los nombres de almacén también se ajustan.** Se leen de la fila siguiente a los
+encabezados, sea cual sea, en lugar de la fila 2 fija.
 
-## Verificado con tus archivos
+## Verificado con el archivo nuevo
 
 ```
 inventario     400 filas
-  existencias: 89,589
-  valor:       $23,228,673
-  almacenes:   594 registros en 15 almacenes
+  existencias:  89,452
+  valor:       $23,270,048
+  almacenes:   602 registros en 13 almacenes
 
-ventas      $29,065,136
-cartera     $16,922,534
+ventas       $29,065,136
+cartera      $16,922,534
 ```
 
-Ventas y cobranza no cambiaron: el problema era exclusivo del inventario.
+Las 89,452 existencias coinciden con el total que trae la propia columna del
+Excel.
+
+Aparecieron dos almacenes que antes no tenían existencias: **La Comer Cajas** (24
+botellas) y una redistribución entre Almex y Departamentales.
 
 ## Pasos
 
@@ -50,21 +60,21 @@ Ventas y cobranza no cambiaron: el problema era exclusivo del inventario.
 npm install
 npm run build
 git add .
-git commit -m "Corrige lectura de encabezados con espacios"
+git commit -m "ETL tolerante a cambios de estructura en el inventario"
 git push
 ```
 
-**Después de desplegar, recarga los datos** desde *actualizar datos*. Sin eso el
-costo sigue en null en la base.
+Después de desplegar, vuelve a intentar la carga desde *actualizar datos*.
 
-### Qué debe cambiar en Pulso
+Vas a ver este aviso, que es informativo y correcto:
 
-| Ahora | Después |
-|---|---|
-| 0.0 meses · $0 en stock | **10.7 meses · $23,228,673** |
-| 5 hallazgos | **6 hallazgos** |
+> *Usé la hoja "COST_PRICE-GRAL (i)" porque no encontré "INVENTARIO".*
 
-El hallazgo nuevo es *"$17.2M en inventario con más de un año de cobertura"*, que
-es de los más fuertes que tienes.
+## Recomendación para el cliente
 
-Revisa también **Operativos**: el valor de inventario debe salir en $23.2M.
+Vale la pena pedirles que **mantengan estable el nombre de la hoja y de las
+columnas**. El sistema ya aguanta bastante variación, pero si un día cambian algo
+que no anticipé, la carga vuelve a fallar.
+
+Una frase simple: *"el archivo puede traer los datos que sea, pero la hoja y los
+títulos de columna conviene que no cambien de nombre"*.

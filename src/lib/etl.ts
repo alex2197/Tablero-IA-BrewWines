@@ -69,7 +69,12 @@ export const factura = (v: unknown): string =>
 
 interface DefArchivo {
   archivo: string;
+  /** Nombre exacto de la hoja. Si no existe, se buscan las alternativas. */
   hoja?: string;
+  /** Fragmentos que identifican la hoja correcta cuando el nombre cambió. */
+  hojaContiene?: string[];
+  /** Columna que debe existir para reconocer la fila de encabezados. */
+  claveEncabezado?: string;
   tabla: string;
   columnas: string[];
   /** Devuelve la fila normalizada, o null si debe descartarse */
@@ -110,13 +115,18 @@ function capitalizar(t: string): string {
  * la segunda para armar el catálogo.
  */
 function leerNombresAlmacen(buf: Buffer | ArrayBuffer): unknown[][] {
+  const def = ARCHIVOS.find(a => a.tabla === 'inventario');
   const wb = XLSX.read(buf, { type: 'buffer' });
-  const hoja = wb.Sheets['INVENTARIO'] ?? wb.Sheets[wb.SheetNames[0]];
+  const nombreHoja = elegirHoja(wb, def?.hoja, def?.hojaContiene);
+  const hoja = wb.Sheets[nombreHoja];
   if (!hoja) return [];
 
   const matriz = XLSX.utils.sheet_to_json<unknown[]>(hoja, { header: 1, defval: null });
-  const codigos = (matriz[0] ?? []) as unknown[];
-  const nombres = (matriz[1] ?? []) as unknown[];
+  // La fila de encabezados se ha movido entre versiones del archivo;
+  // los nombres legibles van siempre en la fila siguiente.
+  const idx = filaEncabezados(matriz, def?.claveEncabezado);
+  const codigos = (matriz[idx] ?? []) as unknown[];
+  const nombres = (matriz[idx + 1] ?? []) as unknown[];
 
   const salida: unknown[][] = [];
   const vistos = new Set<string>();
@@ -147,7 +157,8 @@ function leerNombresAlmacen(buf: Buffer | ArrayBuffer): unknown[][] {
 function expandirAlmacenes(filas: Record<string, unknown>[]): unknown[][] {
   const salida: unknown[][] = [];
   for (const r of filas) {
-    const clave = txt(r['Clave de producto']);
+    // La columna de clave cambia de nombre entre versiones del archivo.
+    const clave = txt(r['Clave de producto']) ?? txt(r['Clave']);
     if (!clave) continue;
     for (const col of Object.keys(r)) {
       if (!/^\s*ALM-\d+\s*$/i.test(col)) continue;
@@ -193,12 +204,20 @@ export const ARCHIVOS: DefArchivo[] = [
     },
   },
   {
-    archivo: 'Inventario.xlsx', hoja: 'INVENTARIO', tabla: 'inventario', requerido: true,
+    archivo: 'Inventario.xlsx',
+    hoja: 'INVENTARIO',
+    // El archivo ha llegado con la hoja llamada "COST_PRICE-GRAL (i)".
+    hojaContiene: ['inventario', 'cost_price', 'existencias'],
+    claveEncabezado: 'LINEA',
+    tabla: 'inventario', requerido: true,
     columnas: ['producto_clave', 'existencias', 'costo', 'linea', 'lugar'],
     mapear: r => {
-      const clave = txt(r['Clave de producto']);
+      // La columna de clave ha venido como "Clave de producto" y como "Clave".
+      const clave = txt(r['Clave de producto']) ?? txt(r['Clave']);
       if (!clave) return null;
-      return [clave, num(r['Existencias']) ?? 0, num(r['COSTO']), txt(r['LINEA']), txt(r['LUGAR'])];
+      // Las existencias han venido como "Existencias" y como "EXISTENCIAS".
+      const ex = num(r['Existencias']) ?? num(r['EXISTENCIAS']) ?? num(r['SUMA']) ?? 0;
+      return [clave, ex, num(r['COSTO']), txt(r['LINEA']), txt(r['LUGAR'])];
     },
   },
   {
@@ -259,17 +278,59 @@ function filaTolerante(r: Record<string, unknown>): Record<string, unknown> {
   });
 }
 
-function leerHoja(buf: Buffer | ArrayBuffer, hoja?: string) {
+/** Elige la hoja: por nombre exacto, por fragmento, o la primera. */
+function elegirHoja(wb: XLSX.WorkBook, hoja?: string, contiene?: string[]) {
+  if (hoja && wb.Sheets[hoja]) return hoja;
+  if (contiene?.length) {
+    const halla = wb.SheetNames.find(n => {
+      const nn = normalizarClave(n);
+      return contiene.some(c => nn.includes(normalizarClave(c)));
+    });
+    if (halla) return halla;
+  }
+  return wb.SheetNames[0];
+}
+
+/**
+ * Localiza la fila de encabezados. Algunos archivos traen totales o títulos
+ * arriba, así que la fila 1 no siempre es la buena. Se busca la primera fila
+ * que contenga la columna clave; si no se indica ninguna, la que tenga más
+ * celdas de texto no vacías.
+ */
+function filaEncabezados(matriz: unknown[][], clave?: string): number {
+  const limite = Math.min(matriz.length, 12);
+  if (clave) {
+    const k = normalizarClave(clave);
+    for (let i = 0; i < limite; i++) {
+      const fila = matriz[i] ?? [];
+      if (fila.some(c => typeof c === 'string' && normalizarClave(c) === k)) return i;
+    }
+  }
+  let mejor = 0, max = -1;
+  for (let i = 0; i < limite; i++) {
+    const n = (matriz[i] ?? []).filter(c => typeof c === 'string' && c.trim() !== '').length;
+    if (n > max) { max = n; mejor = i; }
+  }
+  return mejor;
+}
+
+function leerHoja(buf: Buffer | ArrayBuffer, def?: Pick<DefArchivo, 'hoja' | 'hojaContiene' | 'claveEncabezado'>) {
   const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
-  const nombre = hoja && wb.Sheets[hoja] ? hoja : wb.SheetNames[0];
-  if (!wb.Sheets[nombre]) throw new Error(`No encontré la hoja "${hoja ?? nombre}"`);
+  const nombre = elegirHoja(wb, def?.hoja, def?.hojaContiene);
+  if (!wb.Sheets[nombre]) throw new Error(`El archivo no tiene hojas legibles`);
+
+  const matriz = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombre], { header: 1, defval: null });
+  const idx = filaEncabezados(matriz, def?.claveEncabezado);
+
   const crudas = XLSX.utils.sheet_to_json<Record<string, unknown>>(
-    wb.Sheets[nombre], { defval: null }
+    wb.Sheets[nombre], { defval: null, range: idx }
   );
   return {
     filas: crudas.map(filaTolerante),
     hojaUsada: nombre,
     hojas: wb.SheetNames,
+    filaEncabezado: idx,
+    matriz,
   };
 }
 
@@ -296,11 +357,11 @@ export function analizar(archivos: ArchivoEntrada[]): Analisis {
     const validas: unknown[][] = [];
 
     try {
-      const { filas, hojaUsada, hojas } = leerHoja(entrada.buffer, def.hoja);
+      const { filas, hojaUsada, hojas } = leerHoja(entrada.buffer, def);
       leidas = filas.length;
 
       if (def.hoja && hojaUsada !== def.hoja) {
-        avisos.push(`Usé la hoja "${hojaUsada}" porque no encontré "${def.hoja}". Hojas: ${hojas.join(', ')}`);
+        avisos.push(`Usé la hoja "${hojaUsada}" porque no encontré "${def.hoja}".`);
       }
       if (!filas.length) {
         errores.push(`${def.archivo} está vacío`);
@@ -356,7 +417,8 @@ export function analizar(archivos: ArchivoEntrada[]): Analisis {
   const entradaInv = porNombre.get('inventario.xlsx');
   if (entradaInv) {
     try {
-      const { filas } = leerHoja(entradaInv.buffer, 'INVENTARIO');
+      const defInv = ARCHIVOS.find(a => a.tabla === 'inventario')!;
+      const { filas } = leerHoja(entradaInv.buffer, defInv);
       const alm = expandirAlmacenes(filas);
       datos.set('inventario_almacen', {
         columnas: ['producto_clave', 'almacen', 'existencias'],
